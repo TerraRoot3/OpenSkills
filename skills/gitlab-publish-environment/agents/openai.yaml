@@ -1,0 +1,4 @@
+interface:
+  display_name: "GitLab Publish Environment"
+  short_description: "Publish GitLab repos to dev or release"
+  default_prompt: "Use $gitlab-publish-environment to publish this GitLab frontend or backend repository to the right environment branch: dev for test or release for pre-release."
