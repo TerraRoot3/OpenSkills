@@ -22,6 +22,7 @@ Use the target branch resolved from the user request:
 
 - Test environment: `dev`
 - Pre-release environment: `release`
+- Production environment: first merge the latest `master` into the source branch, rerun verification, push that source branch, then merge into `master`, then push the next release tag from `master`
 - Explicit branch name from the user overrides the default mapping
 
 ## Common Verification Commands
@@ -68,3 +69,8 @@ If no `test` script exists, use another meaningful project check such as `lint`,
 ## Conflict Resolution Reminder
 
 After resolving merge conflicts on the target branch, rerun the same verification family that was used on the source branch whenever practical.
+
+For production publishes:
+
+- always rerun the same verification family after merging `master` into the source branch before pushing that source branch
+- once after resolving conflicts while merging the source branch back into `master`
