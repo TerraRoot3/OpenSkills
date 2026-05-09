@@ -10,9 +10,10 @@ Shared Codex skills for cross-machine installation and team reuse.
 
 - `gitlab-start-development`
   - Start a new GitLab task with the real GitLab issue as the numbering source of truth
+  - The user prepares the clean worktree first; this skill does not create it
   - Sync the latest `master` or `main` first, based on repo rules
   - Create the remote task branch from that latest mainline branch
-  - Fetch the correct branch locally and create the matching worktree before coding
+  - Fetch the correct branch locally and switch the prepared worktree onto it before coding
   - Useful when the repo also requires local issue/design/ipml docs after the correct branch exists
 
 - `gitlab-publish-environment`

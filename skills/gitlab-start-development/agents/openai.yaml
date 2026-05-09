@@ -1,4 +1,4 @@
 interface:
   display_name: "GitLab Start Development"
-  short_description: "Create the real GitLab issue, matching remote branch, and local worktree before coding"
-  default_prompt: "Use $gitlab-start-development to start this GitLab task correctly: sync the latest mainline branch, create the real GitLab issue, derive the branch from the returned issue number, create the remote branch, fetch it locally, and set up the correct worktree before writing code."
+  short_description: "Use an existing worktree to create the real GitLab issue and matching branch before coding"
+  default_prompt: "Use $gitlab-start-development to start this GitLab task correctly after the user has prepared the worktree: sync the latest mainline branch, create the real GitLab issue, derive the branch from the returned issue number, create the remote branch, fetch it locally, and switch the prepared worktree onto that branch before writing code."
