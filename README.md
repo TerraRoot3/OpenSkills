@@ -8,6 +8,13 @@ Shared Codex skills for cross-machine installation and team reuse.
 
 ## Current Skills
 
+- `gitlab-start-development`
+  - Start a new GitLab task with the real GitLab issue as the numbering source of truth
+  - Sync the latest `master` or `main` first, based on repo rules
+  - Create the remote task branch from that latest mainline branch
+  - Fetch the correct branch locally and create the matching worktree before coding
+  - Useful when the repo also requires local issue/design/ipml docs after the correct branch exists
+
 - `gitlab-publish-environment`
   - Publish GitLab backend or web frontend repositories to shared environments
   - `发布测网` maps to `dev`
