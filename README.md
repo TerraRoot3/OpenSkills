@@ -20,7 +20,8 @@ Shared Codex skills for cross-machine installation and team reuse.
   - Publish GitLab backend or web frontend repositories to shared environments
   - `发布测网` maps to `dev`
   - `发布预发` maps to `release`
-  - `发布现网` or `发布到现网` first syncs `master` into the source branch, then merges into `master`, pushes `master`, pushes the next release tag, and switches back to the original branch
+  - `发布现网` or `发布到现网` first syncs `master` into the source branch, then merges into `master`, pushes `master`, pushes the next version tag, and switches back to the original branch
+  - Default policy is to merge the full source branch into the requested target branch; do not silently switch to cherry-pick or isolated publish flows unless the user explicitly asks for that exception or repo rules require it
   - Not for Flutter, iOS, Android, React Native, or other mobile app repositories
 
 ## Install Example
