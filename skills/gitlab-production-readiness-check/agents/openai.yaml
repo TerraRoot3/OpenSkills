@@ -1,0 +1,4 @@
+interface:
+  display_name: "GitLab Production Readiness Check"
+  short_description: "Sync the latest master or main into a GitLab task branch before production and stop if it affects the demand"
+  default_prompt: "Use $gitlab-production-readiness-check when the user asks for 上线检查 or a pre-production sync check on the current GitLab task branch: commit and push the branch first, sync the latest master or main into it, resolve conflicts carefully, review whether the incoming mainline changes affect the current demand, and only push the updated source branch when that review shows no material impact."
