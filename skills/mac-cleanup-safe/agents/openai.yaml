@@ -1,0 +1,4 @@
+interface:
+  display_name: "Mac Cleanup Safe"
+  short_description: "Dry-run-first Mac cache cleanup"
+  default_prompt: "Use $mac-cleanup-safe to scan my Mac storage, show safe cleanup candidates, then clean only confirmed safe items."

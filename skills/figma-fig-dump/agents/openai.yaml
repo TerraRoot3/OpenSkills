@@ -1,0 +1,4 @@
+interface:
+  display_name: "Figma FIG Dump"
+  short_description: "Parse local .fig files into reusable design data."
+  default_prompt: "Dump a local Figma .fig file by node id into JSON, images, blobs, and text indexes."
