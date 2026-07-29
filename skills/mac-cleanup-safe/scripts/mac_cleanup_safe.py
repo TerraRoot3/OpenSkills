@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import plistlib
 import shutil
 import subprocess
 import sys
@@ -53,6 +54,48 @@ PROJECT_SKIP_DIRS = {
     "Movies",
     "Music",
     "Pictures",
+}
+BROWSER_CACHE_NAMES = {
+    "Application Cache",
+    "Cache",
+    "CacheStorage",
+    "Code Cache",
+    "Crashpad",
+    "DawnCache",
+    "GPUCache",
+    "GraphiteDawnCache",
+    "GrShaderCache",
+    "Media Cache",
+    "ShaderCache",
+}
+APP_RESIDUE_MIN_KB = 50 * 1024
+APP_RESIDUE_ROOTS = [
+    ("application-support", HOME / "Library" / "Application Support"),
+    ("caches", HOME / "Library" / "Caches"),
+    ("containers", HOME / "Library" / "Containers"),
+    ("group-containers", HOME / "Library" / "Group Containers"),
+    ("http-storages", HOME / "Library" / "HTTPStorages"),
+    ("launch-agents", HOME / "Library" / "LaunchAgents"),
+    ("logs", HOME / "Library" / "Logs"),
+    ("preferences", HOME / "Library" / "Preferences"),
+    ("saved-state", HOME / "Library" / "Saved Application State"),
+    ("webkit", HOME / "Library" / "WebKit"),
+]
+KNOWN_CACHE_RESIDUE_NAMES = {
+    "cocoapods",
+    "composer",
+    "deno",
+    "go-build",
+    "gopls",
+    "homebrew",
+    "ms-playwright",
+    "node-gyp",
+    "pip",
+    "pnpm",
+    "pypoetry",
+    "puppeteer",
+    "uv",
+    "yarn",
 }
 
 
@@ -223,6 +266,112 @@ def project_scan_roots(args: argparse.Namespace) -> list[Path]:
     return trimmed
 
 
+def read_app_bundle_id(app: Path) -> str:
+    plist = app / "Contents" / "Info.plist"
+    if not plist.exists():
+        return ""
+    try:
+        with plist.open("rb") as handle:
+            value = plistlib.load(handle).get("CFBundleIdentifier", "")
+        return str(value).lower()
+    except Exception:
+        return ""
+
+
+def installed_app_tokens() -> set[str]:
+    tokens: set[str] = {
+        "apple",
+        "application support",
+        "caches",
+        "com.apple",
+        "containers",
+        "group containers",
+        "mobile documents",
+        "preferences",
+    }
+    aliases = {
+        "android studio": ["androidstudio", "android studio", "google"],
+        "chatgpt": ["chatgpt", "openai", "codex", "com.openai"],
+        "douyin": ["douyin", "byted", "bytedance", "抖音开发者工具"],
+        "figma": ["figma"],
+        "google chrome": ["chrome", "google", "com.google.chrome"],
+        "lark": ["lark", "larkshell"],
+        "opengit": ["opengit", "open-git"],
+        "safari": ["safari", "com.apple.safari"],
+        "visual studio code": ["code", "vscode", "visual studio code", "microsoft.vscode"],
+        "wechat": ["wechat", "weixin", "tencent", "微信开发者工具"],
+        "wechatwebdevtools": ["wechat", "weixin", "tencent", "微信开发者工具"],
+        "xcode": ["xcode", "developer"],
+    }
+    for root in [Path("/Applications"), HOME / "Applications"]:
+        for app in root.glob("*.app"):
+            name = app.stem.lower()
+            tokens.add(name)
+            tokens.add(name.replace(" ", ""))
+            bundle_id = read_app_bundle_id(app)
+            if bundle_id:
+                tokens.add(bundle_id)
+                parts = [part for part in bundle_id.split(".") if len(part) >= 3]
+                tokens.update(parts)
+            for key, values in aliases.items():
+                if key in name:
+                    tokens.update(values)
+    return tokens
+
+
+def looks_installed_related(path: Path, tokens: set[str]) -> bool:
+    name = path.name.lower()
+    compact = "".join(ch for ch in name if ch.isalnum())
+    if name.startswith(("com.apple.", "group.com.apple.")):
+        return True
+    return any(token and (token in name or "".join(ch for ch in token if ch.isalnum()) in compact) for token in tokens)
+
+
+def scan_uninstall_residue_suspects(args: argparse.Namespace) -> Candidate | None:
+    tokens = installed_app_tokens()
+    rows: list[tuple[int, Path, str]] = []
+    for label, root in APP_RESIDUE_ROOTS:
+        for item in child_paths(root):
+            if not item.exists() and not item.is_symlink():
+                continue
+            if label == "caches" and item.name.lower() in KNOWN_CACHE_RESIDUE_NAMES:
+                continue
+            if looks_installed_related(item, tokens):
+                continue
+            size = du_path_kb(item)
+            if size >= APP_RESIDUE_MIN_KB:
+                rows.append((size, item, label))
+    if not rows:
+        return None
+    rows.sort(reverse=True, key=lambda item: item[0])
+    details = [f"{human_size(size):>8}  {path}  ({label})" for size, path, label in rows[: args.max_orphan_results]]
+    return Candidate(
+        cid="possible-uninstall-leftovers",
+        risk="REVIEW",
+        title="Possible uninstalled app leftovers",
+        size_kb=sum(size for size, _path, _label in rows),
+        action="none",
+        consequence="These may be app data, login state, or leftovers; inspect app-by-app before deleting.",
+        reason="AppCleaner/Pearcleaner-style Library residue discovery; list-only",
+        cleanable=False,
+        details=details,
+    )
+
+
+def chromium_profile_cache_paths(browser_root: Path) -> list[Path]:
+    paths: list[Path] = []
+    if not browser_root.exists():
+        return paths
+    for profile in child_paths(browser_root):
+        if not profile.is_dir():
+            continue
+        for name in BROWSER_CACHE_NAMES:
+            paths.append(profile / name)
+        paths.append(profile / "Service Worker" / "CacheStorage")
+        paths.append(profile / "Service Worker" / "ScriptCache")
+    return existing(paths)
+
+
 def scan_project_artifacts(args: argparse.Namespace) -> Candidate | None:
     if args.no_project_scan:
         return None
@@ -338,7 +487,9 @@ def cleanup_candidate(candidate: Candidate, keep_ios: str, execute: bool, log: l
 def active_summary(proc: ProcessIndex) -> dict[str, bool]:
     return {
         "chrome": proc.any(["google chrome", "/chrome.app/", "chrome helper"]),
+        "firefox": proc.any(["firefox", "/firefox.app/"]),
         "lark": proc.any(["larkshell", "lark helper", "/lark.app/"]),
+        "safari": proc.any(["safari", "/safari.app/", "com.apple.safari"]),
         "android_gradle": proc.any(["android studio", "gradle", "kotlin compile daemon", "gradledaemon"]),
         "xcode": proc.any(["/xcode.app/", "xcodebuild", "xcbbuildservice", "xcbuild"]),
         "go_tools": proc.any(["gopls", " go ", "/go test", "/go build", "/go run", " dlv "]),
@@ -465,11 +616,12 @@ def build_candidates(args: argparse.Namespace) -> tuple[list[Candidate], dict[st
     add_path_candidate(
         candidates,
         "xcode-derived-data",
-        "SAFE",
+        "REVIEW",
         "Xcode DerivedData",
         [HOME / "Library" / "Developer" / "Xcode" / "DerivedData"],
         "delete_children",
         "Xcode will rebuild indexes and intermediates.",
+        reason="developer cache with noticeable rebuild/indexing cost",
         blocked=xcode_block,
     )
 
@@ -478,11 +630,12 @@ def build_candidates(args: argparse.Namespace) -> tuple[list[Candidate], dict[st
         add_command_candidate(
             candidates,
             "go-build-cache",
-            "SAFE",
+            "REVIEW",
             "Go build and test cache",
             gocache,
             [["go", "clean", "-cache", "-testcache"]],
             "Go rebuilds packages on the next build; module downloads are kept.",
+            reason="developer cache with noticeable first-build cost",
             blocked="Go tooling appears active" if active["go_tools"] else "",
         )
 
@@ -730,10 +883,11 @@ def build_candidates(args: argparse.Namespace) -> tuple[list[Candidate], dict[st
         "REVIEW",
         "Gradle transform caches",
         gradle_versions,
-        "delete_paths",
-        "Android/Gradle rebuilds transforms; first build can be slow.",
-        reason="avoid while Android Studio or Gradle is running",
+        "none",
+        "Gradle data is retained by user preference.",
+        reason="user preference: do not clean Gradle caches",
         blocked="Android Studio/Gradle appears active" if gradle_active else "",
+        cleanable=False,
     )
     add_path_candidate(
         candidates,
@@ -741,10 +895,11 @@ def build_candidates(args: argparse.Namespace) -> tuple[list[Candidate], dict[st
         "REVIEW",
         "Gradle module dependency cache",
         [HOME / ".gradle" / "caches" / "modules-2"],
-        "delete_children",
-        "Gradle redownloads dependencies; first build can be slow/offline-unfriendly.",
-        reason="dependency cache, not a temp build output",
+        "none",
+        "Gradle dependency cache is retained by user preference.",
+        reason="user preference: do not clean Gradle caches",
         blocked="Android Studio/Gradle appears active" if gradle_active else "",
+        cleanable=False,
     )
     add_path_candidate(
         candidates,
@@ -752,10 +907,11 @@ def build_candidates(args: argparse.Namespace) -> tuple[list[Candidate], dict[st
         "REVIEW",
         "Gradle wrapper distributions",
         [HOME / ".gradle" / "wrapper" / "dists"],
-        "delete_children",
-        "Gradle redownloads wrapper distributions.",
-        reason="can slow first Gradle run after cleanup",
+        "none",
+        "Gradle wrapper distributions are retained by user preference.",
+        reason="user preference: do not clean Gradle caches",
         blocked="Android Studio/Gradle appears active" if gradle_active else "",
+        cleanable=False,
     )
 
     chrome_active = active["chrome"]
@@ -781,10 +937,10 @@ def build_candidates(args: argparse.Namespace) -> tuple[list[Candidate], dict[st
             chrome_base / "OptimizationGuidePredictionModels",
             chrome_base / "OnDeviceModel",
         ],
-        "delete_children",
-        "Chrome may redownload on-device model assets.",
-        reason="application support data; close Chrome first",
-        blocked="Chrome appears active" if chrome_active else "",
+        "none",
+        "Chrome Gemini Nano and related on-device model assets are retained by user preference.",
+        reason="user preference: do not clean Chrome on-device models",
+        cleanable=False,
     )
     add_path_candidate(
         candidates,
@@ -796,6 +952,60 @@ def build_candidates(args: argparse.Namespace) -> tuple[list[Candidate], dict[st
         "May sign out or reset offline site state.",
         reason="site data, not plain cache",
         cleanable=False,
+    )
+    add_path_candidate(
+        candidates,
+        "chrome-profile-caches",
+        "REVIEW",
+        "Chrome profile caches across all profiles",
+        chromium_profile_cache_paths(chrome_base),
+        "delete_paths",
+        "Chrome profile caches are removed; pages and PWAs may rebuild cached resources.",
+        reason="browser-cache sweep inspired by open-source cleaner rules; close Chrome first",
+        blocked="Chrome appears active" if chrome_active else "",
+    )
+    add_path_candidate(
+        candidates,
+        "chrome-component-download-caches",
+        "REVIEW",
+        "Chrome component download caches",
+        [
+            chrome_base / "component_crx_cache",
+            chrome_base / "extensions_crx_cache",
+            HOME / "Library" / "Application Support" / "Google" / "GoogleUpdater" / "crx_cache",
+        ],
+        "delete_children",
+        "Chrome/Google updater may redownload component or extension packages.",
+        reason="download cache, not Gemini Nano model storage",
+        blocked="Chrome appears active" if chrome_active else "",
+    )
+    firefox_active = active["firefox"]
+    add_path_candidate(
+        candidates,
+        "firefox-caches",
+        "REVIEW",
+        "Firefox profile caches",
+        [HOME / "Library" / "Caches" / "Firefox", HOME / "Library" / "Caches" / "Mozilla"],
+        "delete_children",
+        "Firefox redownloads cached web assets.",
+        reason="browser cache; close Firefox first",
+        blocked="Firefox appears active" if firefox_active else "",
+    )
+    safari_active = active["safari"]
+    add_path_candidate(
+        candidates,
+        "safari-caches",
+        "REVIEW",
+        "Safari caches",
+        [
+            HOME / "Library" / "Caches" / "com.apple.Safari",
+            HOME / "Library" / "Safari" / "Favicon Cache",
+            HOME / "Library" / "Containers" / "com.apple.Safari" / "Data" / "Library" / "Caches",
+        ],
+        "delete_children",
+        "Safari redownloads cached web assets and favicons.",
+        reason="browser cache; close Safari first",
+        blocked="Safari appears active" if safari_active else "",
     )
 
     lark_active = active["lark"]
@@ -958,18 +1168,27 @@ def build_candidates(args: argparse.Namespace) -> tuple[list[Candidate], dict[st
 
     downloads = HOME / "Downloads"
     large_downloads: list[str] = []
+    installer_downloads: list[str] = []
     total_downloads_kb = 0
+    total_installers_kb = 0
     if downloads.exists():
         files = []
+        installers = []
         for item in child_paths(downloads):
             if item.is_file():
                 size = du_path_kb(item)
                 if size >= 300 * 1024:
                     files.append((size, item))
+                if item.suffix.lower() in {".dmg", ".pkg", ".mpkg", ".ipsw", ".zip"} and size >= 50 * 1024:
+                    installers.append((size, item))
         files.sort(reverse=True, key=lambda x: x[0])
+        installers.sort(reverse=True, key=lambda x: x[0])
         for size, item in files[:10]:
             total_downloads_kb += size
             large_downloads.append(f"{human_size(size):>8}  {item}")
+        for size, item in installers[:15]:
+            total_installers_kb += size
+            installer_downloads.append(f"{human_size(size):>8}  {item}")
     if large_downloads:
         candidates.append(
             Candidate(
@@ -984,10 +1203,28 @@ def build_candidates(args: argparse.Namespace) -> tuple[list[Candidate], dict[st
                 details=large_downloads,
             )
         )
+    if installer_downloads:
+        candidates.append(
+            Candidate(
+                cid="downloads-installers",
+                risk="REVIEW",
+                title="Downloaded installers and archives",
+                size_kb=total_installers_kb,
+                action="none",
+                consequence="Installer/archive downloads can usually be removed after install, but personal archives need manual review.",
+                reason="common cleanup target; list-only",
+                cleanable=False,
+                details=installer_downloads,
+            )
+        )
 
     project_artifacts = scan_project_artifacts(args)
     if project_artifacts:
         candidates.append(project_artifacts)
+
+    orphan_suspects = scan_uninstall_residue_suspects(args)
+    if orphan_suspects:
+        candidates.append(orphan_suspects)
 
     add_path_candidate(
         candidates,
@@ -1100,7 +1337,7 @@ def select_targets(candidates: list[Candidate], args: argparse.Namespace) -> lis
         selected = False
         if c.risk == "SAFE" and args.scope in {"safe", "all"}:
             selected = True
-        if c.risk == "REVIEW" and c.cid in includes:
+        if c.cid in includes:
             selected = True
         if c.risk == "REVIEW" and args.allow_review_all and args.scope in {"review", "all"}:
             selected = True
@@ -1133,6 +1370,7 @@ def main() -> int:
         p.add_argument("--max-project-depth", type=int, default=DEFAULT_PROJECT_DEPTH)
         p.add_argument("--max-project-dirs", type=int, default=DEFAULT_PROJECT_MAX_DIRS)
         p.add_argument("--max-project-results", type=int, default=DEFAULT_PROJECT_MAX_RESULTS)
+        p.add_argument("--max-orphan-results", type=int, default=30)
 
     scan = sub.add_parser("scan", help="show cleanup candidates")
     add_common(scan)
