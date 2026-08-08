@@ -150,13 +150,20 @@
           <div class="gbw-table-wrap">
             <svg id="gbw-graph" class="gbw-graph" aria-label="Git 提交图"></svg>
             <table class="gbw-commit-table">
+              <colgroup>
+                <col data-column-col="graph">
+                <col data-column-col="summary">
+                <col data-column-col="hash">
+                <col data-column-col="date">
+                <col data-column-col="author">
+              </colgroup>
               <thead>
                 <tr>
-                  <th class="gbw-graph-column" scope="col">图形</th>
-                  <th scope="col">提交</th>
-                  <th class="gbw-hash-column" scope="col">哈希</th>
-                  <th class="gbw-date-column" scope="col">日期</th>
-                  <th class="gbw-author-column" scope="col">作者</th>
+                  <th class="gbw-graph-column" scope="col"><span>图形</span><span class="gbw-column-resizer" role="separator" aria-orientation="vertical" aria-label="调整图形列宽" tabindex="0" data-resize-column="graph"></span></th>
+                  <th class="gbw-summary-column" scope="col"><span>提交信息</span><span class="gbw-column-resizer" role="separator" aria-orientation="vertical" aria-label="调整提交信息列宽" tabindex="0" data-resize-column="summary"></span></th>
+                  <th class="gbw-hash-column" scope="col"><span>哈希</span><span class="gbw-column-resizer" role="separator" aria-orientation="vertical" aria-label="调整哈希列宽" tabindex="0" data-resize-column="hash"></span></th>
+                  <th class="gbw-date-column" scope="col"><span>日期</span><span class="gbw-column-resizer" role="separator" aria-orientation="vertical" aria-label="调整日期列宽" tabindex="0" data-resize-column="date"></span></th>
+                  <th class="gbw-author-column" scope="col"><span>作者</span><span class="gbw-column-resizer" role="separator" aria-orientation="vertical" aria-label="调整作者列宽" tabindex="0" data-resize-column="author"></span></th>
                 </tr>
               </thead>
               <tbody id="gbw-commits"></tbody>
@@ -169,7 +176,7 @@
             <h3 id="gbw-detail-heading">提交详情</h3>
           </div>
           <div class="gbw-detail-message">
-            <span>说明</span>
+            <span>提交信息</span>
             <p id="gbw-detail-subject" class="gbw-detail-subject">选择一条提交查看详情。</p>
           </div>
           <dl id="gbw-detail-meta" class="gbw-detail-meta"></dl>
@@ -261,6 +268,8 @@
     --gbw-green: var(--color-text-success, light-dark(rgb(0 145 58), rgb(64 201 119)));
     --gbw-green-soft: var(--color-background-success, light-dark(rgb(230 248 237), rgb(18 48 31)));
     --gbw-red: var(--color-text-danger, light-dark(rgb(210 47 42), rgb(255 103 100)));
+    --gbw-pink: light-dark(#c95173, #ed86a3);
+    --gbw-purple: light-dark(#7a61c9, #ab93ef);
     --gbw-radius: var(--border-radius-lg, 10px);
     --gbw-radius-sm: var(--border-radius-md, 7px);
     --gbw-series-1: var(--color-text-info, light-dark(#2f7ed8, #83c3ff));
@@ -395,27 +404,43 @@
   .gbw-empty { display: grid; place-items: center; color: var(--gbw-muted); font-size: 12px; }
   .gbw-table-shell { min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
   .gbw-table-scroll { min-height: 0; flex: 1 1 auto; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
-  .gbw-table-wrap { position: relative; min-width: 760px; }
-  .gbw-commit-table { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
-  .gbw-commit-table th { position: sticky; z-index: 3; top: 0; height: 30px; padding: 0 8px; border-bottom: 1px solid var(--gbw-border); color: var(--gbw-faint); background: var(--gbw-surface-soft); font-size: 8px; font-weight: 620; text-align: left; }
+  .gbw-table-wrap { position: relative; min-width: 760px; width: max(100%, var(--gbw-table-width, 760px)); }
+  .gbw-commit-table { width: var(--gbw-table-width, 760px); min-width: 760px; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+  .gbw-commit-table th { position: sticky; z-index: 3; top: 0; height: 30px; padding: 0 8px; white-space: nowrap; border-bottom: 1px solid var(--gbw-border); color: var(--gbw-faint); background: var(--gbw-surface-soft); font-size: 8px; font-weight: 620; text-align: left; user-select: none; }
+  .gbw-commit-table th > span:not(.gbw-column-resizer) { display: block; overflow: hidden; text-overflow: ellipsis; }
+  .gbw-column-resizer { position: absolute; z-index: 5; top: 0; right: -5px; width: 10px; height: 100%; border: 0; outline: 0; background: transparent; cursor: col-resize; touch-action: none; }
+  .gbw-column-resizer::after { content: ""; position: absolute; top: 5px; right: 4px; bottom: 5px; width: 1px; border-radius: 1px; background: var(--gbw-border-strong); opacity: .5; transition: background-color 120ms ease, opacity 120ms ease; }
+  .gbw-column-resizer:hover::after,
+  .gbw-column-resizer:focus-visible::after,
+  .gbw-column-resizer.is-active::after { width: 2px; background: var(--gbw-blue); opacity: 1; }
+  .gbw-column-resizer:focus-visible { box-shadow: inset 0 0 0 1px var(--gbw-blue); }
+  #git-branch-workbench.gbw-is-column-resizing,
+  #git-branch-workbench.gbw-is-column-resizing * { cursor: col-resize !important; user-select: none !important; }
   .gbw-commit-table td { height: 36px; padding: 0 8px; border-bottom: 0; color: var(--gbw-muted); font-size: 9px; vertical-align: middle; font-variant-numeric: tabular-nums; }
   .gbw-commit-table tbody tr { content-visibility: auto; contain-intrinsic-size: auto 36px; }
   .gbw-commit-table tbody tr:hover td,
   .gbw-commit-table tbody tr.is-selected td { background: var(--gbw-surface-hover); }
   .gbw-commit-table tbody tr.is-selected td { box-shadow: inset 0 1px 0 color-mix(in srgb, var(--gbw-blue) 28%, transparent), inset 0 -1px 0 color-mix(in srgb, var(--gbw-blue) 28%, transparent); }
-  .gbw-graph-column { width: var(--gbw-graph-width, 72px); }
-  .gbw-hash-column { width: 82px; }
-  .gbw-date-column { width: 118px; }
-  .gbw-author-column { width: 130px; }
-  .gbw-graph-cell { width: var(--gbw-graph-width, 72px); }
-  #git-branch-workbench .gbw-graph { position: absolute; z-index: 2; left: 0; top: 0; width: var(--gbw-graph-width, 72px); height: auto; display: block; pointer-events: none; overflow: visible; }
+  .gbw-graph-column { width: var(--gbw-col-graph, 72px); }
+  .gbw-summary-column { width: var(--gbw-col-summary, 420px); }
+  .gbw-hash-column { width: var(--gbw-col-hash, 82px); }
+  .gbw-date-column { width: var(--gbw-col-date, 118px); }
+  .gbw-author-column { width: var(--gbw-col-author, 130px); }
+  .gbw-graph-cell { width: var(--gbw-col-graph, 72px); }
+  #git-branch-workbench .gbw-graph { position: absolute; z-index: 2; left: 0; top: 0; width: var(--gbw-col-graph, 72px); height: auto; display: block; pointer-events: none; overflow: hidden; }
   .gbw-graph-ring { opacity: 0; }
   .gbw-graph-node.is-selected .gbw-graph-ring { opacity: .28; }
   .gbw-commit-cell { min-width: 0; }
-  #git-branch-workbench .gbw-commit-select { width: 100%; min-width: 0; padding: 2px 0; border: 0; display: flex; align-items: center; gap: 6px; color: var(--gbw-text); background: transparent; cursor: pointer; text-align: left; }
-  .gbw-commit-subject { min-width: 0; flex: 1; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 600; }
-  .gbw-refs { min-width: 0; max-width: 260px; flex: none; display: flex; gap: 4px; overflow: hidden; }
-  .gbw-ref { display: inline-block; max-width: 150px; padding: 1px 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 1px solid color-mix(in srgb, var(--gbw-blue) 30%, transparent); border-radius: 4px; color: var(--gbw-blue); background: var(--gbw-blue-soft); font-size: 8px; }
+  #git-branch-workbench .gbw-commit-select { width: 100%; min-width: 0; padding: 2px 0; border: 0; display: flex; align-items: center; gap: 6px; overflow: hidden; color: var(--gbw-text); background: transparent; cursor: pointer; text-align: left; }
+  .gbw-commit-subject { min-width: 120px; flex: 1 1 220px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 600; }
+  .gbw-refs { min-width: 0; max-width: min(46%, 300px); flex: 0 1 auto; display: flex; gap: 4px; overflow: hidden; }
+  .gbw-ref { display: inline-block; max-width: 150px; padding: 1px 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 1px solid color-mix(in srgb, var(--gbw-blue) 30%, transparent); border-radius: 4px; color: var(--gbw-blue); background: var(--gbw-blue-soft); font-size: 8px; font-weight: 620; }
+  .gbw-ref.is-head { color: var(--gbw-blue); border-color: color-mix(in srgb, var(--gbw-blue) 44%, transparent); background: color-mix(in srgb, var(--gbw-blue) 18%, transparent); }
+  .gbw-ref.is-local { color: var(--gbw-green); border-color: color-mix(in srgb, var(--gbw-green) 40%, transparent); background: color-mix(in srgb, var(--gbw-green) 13%, transparent); }
+  .gbw-ref.is-remote { color: var(--gbw-purple); border-color: color-mix(in srgb, var(--gbw-purple) 40%, transparent); background: color-mix(in srgb, var(--gbw-purple) 13%, transparent); }
+  .gbw-ref.is-tag { color: var(--gbw-amber); border-color: color-mix(in srgb, var(--gbw-amber) 42%, transparent); background: color-mix(in srgb, var(--gbw-amber) 13%, transparent); }
+  .gbw-ref.is-review { color: var(--gbw-pink); border-color: color-mix(in srgb, var(--gbw-pink) 42%, transparent); background: color-mix(in srgb, var(--gbw-pink) 13%, transparent); }
+  .gbw-ref.is-more { color: var(--gbw-faint); border-color: var(--gbw-border); background: var(--gbw-surface-soft); }
   .gbw-code, .gbw-date, .gbw-author { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .gbw-code { color: var(--gbw-faint); font: 9px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; }
   .gbw-author { color: var(--gbw-muted); }
@@ -473,6 +498,7 @@
     .gbw-title-line { flex-wrap: wrap; }
     .gbw-path { max-width: 48vw; }
     .gbw-main { grid-template-columns: 220px minmax(520px, 1fr); overflow-x: auto; overflow-y: hidden; }
+    .gbw-commit-table col[data-column-col="author"] { visibility: collapse; }
     .gbw-author-column { display: none; }
     .gbw-commit-table td:last-child { display: none; }
     .gbw-detail-meta { grid-template-columns: minmax(0, 1fr); }
@@ -488,7 +514,8 @@
 
   @media (prefers-reduced-motion: reduce) {
     .gbw-skip,
-    #git-branch-workbench button { transition-duration: 0ms !important; }
+    #git-branch-workbench button,
+    .gbw-column-resizer::after { transition-duration: 0ms !important; }
   }
 </style>
 
@@ -497,6 +524,19 @@
   const root = document.getElementById("git-branch-workbench");
   const $ = (selector) => root.querySelector(selector);
   const savedWidgetState = window.openai?.widgetState?.privateContent || window.openai?.widgetState || {};
+  const columnKeys = ["graph", "summary", "hash", "date", "author"];
+  const columnLimits = {
+    graph: { min: 56, max: 360 },
+    summary: { min: 260, max: 1200 },
+    hash: { min: 66, max: 260 },
+    date: { min: 96, max: 300 },
+    author: { min: 90, max: 420 }
+  };
+  const savedColumnWidths = {};
+  for (const key of columnKeys) {
+    const value = Number(savedWidgetState.columnWidths?.[key]);
+    if (Number.isFinite(value)) savedColumnWidths[key] = value;
+  }
   const state = {
     snapshot: null,
     selectedHash: typeof savedWidgetState.selectedHash === "string" ? savedWidgetState.selectedHash : null,
@@ -512,6 +552,10 @@
     noticeTimer: null,
     confirmResolve: null,
     graphFrame: null,
+    columnResizeFrame: null,
+    columnResize: null,
+    columnWidths: savedColumnWidths,
+    appliedColumnWidths: null,
     intrinsicHeightFrame: null,
     lastIntrinsicHeight: null
   };
@@ -557,7 +601,8 @@
       } : null,
       privateContent: {
         selectedHash: state.selectedHash,
-        expandedGroups: state.expandedGroups
+        expandedGroups: state.expandedGroups,
+        columnWidths: state.columnWidths
       }
     });
   }
@@ -780,8 +825,12 @@
 
       for (const parentHash of commit.parents) {
         const parent = commitMap.get(parentHash);
-        if (!parent) continue;
         const start = { x: commit.__column, y: commit.__row };
+        if (!parent) {
+          start.color = commit.__color;
+          lines.push([start, { x: start.x, y: commits.length - 0.5 }]);
+          continue;
+        }
         const end = { x: parent.__column, y: parent.__row };
         let middle = null;
 
@@ -808,16 +857,140 @@
   }
 
   function graphColumnWidth(commits) {
-    const branchSpacing = 16;
-    const leftMargin = 12;
-    const maxColumn = commits.reduce((max, commit) => Math.max(max, commit.__column || 0), 0);
-    return Math.max(72, Math.ceil((maxColumn + 1) * branchSpacing + leftMargin * 2 + 5));
+    const branchSpacing = 18;
+    const leftMargin = 14;
+    const recentCommits = commits.slice(0, 10);
+    const maxColumn = recentCommits.reduce((max, commit) => Math.max(max, commit.__column || 0), 0);
+    return Math.max(64, Math.min(180, Math.ceil((maxColumn + 1) * branchSpacing + leftMargin * 2 + 4)));
+  }
+
+  function clampColumnWidth(key, width) {
+    const limits = columnLimits[key];
+    return Math.max(limits.min, Math.min(limits.max, Math.round(width)));
+  }
+
+  function getDefaultColumnWidths(commits = []) {
+    const graph = graphColumnWidth(commits);
+    const hash = 82;
+    const date = 122;
+    const author = 136;
+    const showAuthor = !window.matchMedia?.("(max-width: 820px)").matches;
+    const available = Math.max(760, $(".gbw-table-scroll")?.clientWidth || $("#gbw-history")?.clientWidth || 960);
+    const summary = Math.max(360, available - graph - hash - date - (showAuthor ? author : 0));
+    return { graph, summary, hash, date, author };
+  }
+
+  function applyColumnWidths(commits = state.snapshot?.commits || []) {
+    const defaults = getDefaultColumnWidths(commits);
+    const widths = {};
+    for (const key of columnKeys) {
+      const manual = Number(state.columnWidths[key]);
+      widths[key] = clampColumnWidth(key, Number.isFinite(manual) ? manual : defaults[key]);
+      root.style.setProperty(`--gbw-col-${key}`, `${widths[key]}px`);
+      const column = root.querySelector(`[data-column-col="${key}"]`);
+      if (column) column.style.width = `${widths[key]}px`;
+      const handle = root.querySelector(`[data-resize-column="${key}"]`);
+      if (handle) {
+        handle.setAttribute("aria-valuemin", String(columnLimits[key].min));
+        handle.setAttribute("aria-valuemax", String(columnLimits[key].max));
+        handle.setAttribute("aria-valuenow", String(widths[key]));
+        handle.title = `拖动调整列宽；当前 ${widths[key]} 像素`;
+      }
+    }
+    state.appliedColumnWidths = widths;
+    const visibleColumnKeys = window.matchMedia?.("(max-width: 820px)").matches
+      ? columnKeys.filter((key) => key !== "author")
+      : columnKeys;
+    const tableWidth = visibleColumnKeys.reduce((total, key) => total + widths[key], 0);
+    root.style.setProperty("--gbw-table-width", `${Math.max(760, tableWidth)}px`);
+    return widths;
+  }
+
+  function setColumnWidth(key, width, persist = false) {
+    state.columnWidths[key] = clampColumnWidth(key, width);
+    applyColumnWidths();
+    if (key === "graph") scheduleGraphDraw();
+    if (persist) persistWidgetState();
+  }
+
+  function stopColumnResize(event) {
+    const resize = state.columnResize;
+    if (!resize) return;
+    if (event?.pointerId !== undefined && event.pointerId !== resize.pointerId) return;
+    if (state.columnResizeFrame !== null) {
+      cancelAnimationFrame(state.columnResizeFrame);
+      state.columnResizeFrame = null;
+    }
+    if (Number.isFinite(event?.clientX)) {
+      setColumnWidth(resize.key, resize.startWidth + event.clientX - resize.startX);
+    }
+    resize.handle.classList.remove("is-active");
+    root.classList.remove("gbw-is-column-resizing");
+    document.removeEventListener("pointermove", resize.onMove);
+    document.removeEventListener("pointerup", stopColumnResize);
+    document.removeEventListener("pointercancel", stopColumnResize);
+    state.columnResize = null;
+    persistWidgetState();
+    scheduleGraphDraw();
+  }
+
+  function startColumnResize(event) {
+    if (event.button !== 0) return;
+    const handle = event.currentTarget;
+    const key = handle.dataset.resizeColumn;
+    if (!columnKeys.includes(key)) return;
+    stopColumnResize();
+    const startWidth = state.appliedColumnWidths?.[key] || getDefaultColumnWidths()[key];
+    const resize = {
+      key,
+      handle,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startWidth,
+      onMove: null
+    };
+    resize.onMove = (moveEvent) => {
+      if (moveEvent.pointerId !== resize.pointerId) return;
+      const nextWidth = resize.startWidth + moveEvent.clientX - resize.startX;
+      if (state.columnResizeFrame !== null) cancelAnimationFrame(state.columnResizeFrame);
+      state.columnResizeFrame = requestAnimationFrame(() => {
+        state.columnResizeFrame = null;
+        setColumnWidth(resize.key, nextWidth);
+      });
+    };
+    state.columnResize = resize;
+    handle.classList.add("is-active");
+    root.classList.add("gbw-is-column-resizing");
+    document.addEventListener("pointermove", resize.onMove, { passive: true });
+    document.addEventListener("pointerup", stopColumnResize);
+    document.addEventListener("pointercancel", stopColumnResize);
+    event.preventDefault();
+  }
+
+  function handleColumnResizeKey(event) {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    const key = event.currentTarget.dataset.resizeColumn;
+    const current = state.appliedColumnWidths?.[key] || getDefaultColumnWidths()[key];
+    const step = event.shiftKey ? 24 : 8;
+    setColumnWidth(key, current + (event.key === "ArrowRight" ? step : -step), true);
+    event.preventDefault();
+  }
+
+  function initializeColumnResizers() {
+    for (const handle of root.querySelectorAll("[data-resize-column]")) {
+      handle.addEventListener("pointerdown", startColumnResize);
+      handle.addEventListener("keydown", handleColumnResizeKey);
+    }
   }
 
   function graphY(position, rowCenters) {
     if (!rowCenters.length) return 0;
     if (position <= 0) return rowCenters[0];
-    if (position >= rowCenters.length - 1) return rowCenters[rowCenters.length - 1];
+    if (position >= rowCenters.length - 1) {
+      const lastIndex = rowCenters.length - 1;
+      const rowHeight = rowCenters.length > 1 ? rowCenters[1] - rowCenters[0] : rowCenters[0] * 2;
+      return rowCenters[lastIndex] + ((position - lastIndex) * rowHeight);
+    }
     const start = Math.floor(position);
     const end = Math.ceil(position);
     const progress = position - start;
@@ -836,15 +1009,14 @@
 
     const bodyRect = body.getBoundingClientRect();
     const wrapRect = wrap.getBoundingClientRect();
-    const rowCenters = rows.map((row) => {
-      const rect = row.getBoundingClientRect();
-      return rect.top - bodyRect.top + (rect.height / 2);
-    });
-    const branchSpacing = 16;
-    const leftMargin = 12;
+    const firstRowRect = rows[0].getBoundingClientRect();
+    const rowHeight = firstRowRect.height || 36;
+    const rowCenters = rows.map((_, index) => (index + 0.5) * rowHeight);
+    const branchSpacing = 18;
+    const leftMargin = 14;
     const colors = getGraphColors();
-    const graphWidth = graphColumnWidth(commits);
-    const height = Math.max(1, bodyRect.height);
+    const graphWidth = state.appliedColumnWidths?.graph || graphColumnWidth(commits);
+    const height = Math.max(1, rows.length * rowHeight);
     const top = bodyRect.top - wrapRect.top;
 
     svg.replaceChildren();
@@ -852,10 +1024,11 @@
     svg.setAttribute("width", String(graphWidth));
     svg.setAttribute("height", String(height));
     svg.setAttribute("viewBox", `0 0 ${graphWidth} ${height}`);
+    svg.setAttribute("overflow", "hidden");
 
     const lineGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
     lineGroup.setAttribute("fill", "none");
-    lineGroup.setAttribute("stroke-width", "1.5");
+    lineGroup.setAttribute("stroke-width", "2");
     const circleGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
     svg.append(lineGroup, circleGroup);
 
@@ -906,6 +1079,45 @@
     });
   }
 
+  function normalizeCommitRef(rawRef) {
+    const value = String(rawRef || "").trim();
+    if (!value) return null;
+    if (value.startsWith("tag: ")) {
+      return { label: value.slice(5).trim(), title: value, type: "tag" };
+    }
+    if (value.includes("HEAD ->")) {
+      return { label: value.replace(" -> ", " → "), title: value, type: "head" };
+    }
+    const remoteNames = new Set((state.snapshot?.remoteBranches || []).map((branch) => branch.remoteName).filter(Boolean));
+    const isRemote = [...remoteNames].some((name) => value.startsWith(`${name}/`));
+    return { label: value.replace(" -> ", " → "), title: value, type: isRemote ? "remote" : "local" };
+  }
+
+  function getReviewReference(commit) {
+    const text = `${commit?.subject || ""}\n${commit?.body || ""}`;
+    const gitlabMatch = text.match(/(?:see\s+merge\s+request|merge\s+request|\bMR)\s+(?:[^\s!]+)?!(\d+)/i) ||
+      text.match(/\bMR\s*!?(\d+)/i);
+    if (gitlabMatch) {
+      return { label: `MR !${gitlabMatch[1]}`, title: `GitLab Merge Request !${gitlabMatch[1]}` };
+    }
+    const githubMatch = text.match(/merge\s+pull\s+request\s+#(\d+)/i) ||
+      text.match(/\b(?:pull\s+request|PR)\s*#(\d+)/i) ||
+      text.match(/\(#(\d+)\)\s*$/m);
+    if (githubMatch) {
+      return { label: `PR #${githubMatch[1]}`, title: `GitHub Pull Request #${githubMatch[1]}` };
+    }
+    return null;
+  }
+
+  function makeCommitBadge(label, typeClass, title) {
+    const badge = document.createElement("span");
+    badge.className = `gbw-ref ${typeClass}`;
+    badge.textContent = label;
+    badge.title = title || label;
+    badge.setAttribute("translate", "no");
+    return badge;
+  }
+
   function selectCommit(commit) {
     state.selectedHash = commit.hash;
     for (const row of root.querySelectorAll("#gbw-commits tr")) {
@@ -914,9 +1126,11 @@
     for (const node of root.querySelectorAll(".gbw-graph-node")) {
       node.classList.toggle("is-selected", node.dataset.hash === commit.hash);
     }
-    setText("#gbw-detail-subject", commit.subject || "(无提交说明)");
+    const commitMessage = [commit.subject || "(无提交说明)", commit.body || ""].filter(Boolean).join("\n\n");
+    setText("#gbw-detail-subject", commitMessage);
     const meta = $("#gbw-detail-meta");
     meta.replaceChildren();
+    const review = getReviewReference(commit);
     const rows = [
       ["完整哈希", commit.hash || "—", true],
       ["作者", commit.author || "—"],
@@ -925,6 +1139,7 @@
       ["父提交", commit.parents?.join(", ") || "无", true],
       ["引用", commit.refs?.join(", ") || "无", true]
     ];
+    if (review) rows.push(["MR/PR", review.label]);
     for (const [label, value, codeValue] of rows) {
       const wrap = document.createElement("div");
       const dt = document.createElement("dt");
@@ -1248,7 +1463,7 @@
     }
 
     assignGraphLayout(commits);
-    root.style.setProperty("--gbw-graph-width", `${graphColumnWidth(commits)}px`);
+    applyColumnWidths(commits);
     for (const commit of commits) {
       const row = document.createElement("tr");
       row.dataset.hash = commit.hash;
@@ -1262,24 +1477,25 @@
       select.type = "button";
       select.className = "gbw-commit-select";
       select.setAttribute("aria-label", `查看提交 ${commit.shortHash}: ${commit.subject || "无提交说明"}`);
+      const decoratedRefs = (commit.refs || []).map(normalizeCommitRef).filter(Boolean);
+      const review = getReviewReference(commit);
+      if (decoratedRefs.length || review) {
+        const refs = document.createElement("span");
+        refs.className = "gbw-refs";
+        const visibleRefCount = review ? 3 : 4;
+        for (const ref of decoratedRefs.slice(0, visibleRefCount)) {
+          refs.appendChild(makeCommitBadge(ref.label, `is-${ref.type}`, ref.title));
+        }
+        if (review) refs.appendChild(makeCommitBadge(review.label, "is-review", review.title));
+        const hiddenCount = Math.max(0, decoratedRefs.length - visibleRefCount);
+        if (hiddenCount) refs.appendChild(makeCommitBadge(`+${hiddenCount}`, "is-more", decoratedRefs.map((ref) => ref.title).join(", ")));
+        select.appendChild(refs);
+      }
       const subject = document.createElement("span");
       subject.className = "gbw-commit-subject";
       subject.textContent = commit.subject || "(无提交说明)";
-      subject.title = commit.subject || "(无提交说明)";
+      subject.title = [decoratedRefs.map((ref) => ref.title).join(", "), commit.subject || "(无提交说明)"].filter(Boolean).join(" · ");
       select.appendChild(subject);
-      if (commit.refs?.length) {
-        const refs = document.createElement("span");
-        refs.className = "gbw-refs";
-        for (const ref of commit.refs.slice(0, 3)) {
-          const badge = document.createElement("span");
-          badge.className = "gbw-ref";
-          badge.textContent = ref;
-          badge.title = ref;
-          badge.setAttribute("translate", "no");
-          refs.appendChild(badge);
-        }
-        select.appendChild(refs);
-      }
       select.addEventListener("click", () => selectCommit(commit));
       messageCell.appendChild(select);
 
@@ -1562,14 +1778,23 @@
   }, { passive: true });
 
   if (typeof ResizeObserver === "function") {
-    const graphObserver = new ResizeObserver(() => scheduleGraphDraw());
-    graphObserver.observe($(".gbw-table-wrap"));
+    const graphObserver = new ResizeObserver(() => {
+      applyColumnWidths();
+      scheduleGraphDraw();
+    });
+    graphObserver.observe($("#gbw-history"));
     const inlineCardObserver = new ResizeObserver(() => scheduleIntrinsicHeightReport());
     inlineCardObserver.observe($(".gbw-inline-card"));
   }
 
-  window.addEventListener("resize", scheduleIntrinsicHeightReport, { passive: true });
+  window.addEventListener("resize", () => {
+    applyColumnWidths();
+    scheduleGraphDraw();
+    scheduleIntrinsicHeightReport();
+  }, { passive: true });
 
+  initializeColumnResizers();
+  applyColumnWidths();
   applyHostContext(window.openai?.hostContext || { theme: window.openai?.theme, styles: window.openai?.styles });
   applyDisplayMode(window.openai?.displayMode || "inline");
   if (window.openai?.toolOutput) render(window.openai.toolOutput);

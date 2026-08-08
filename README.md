@@ -44,7 +44,9 @@ Shared Codex skills for cross-machine installation and team reuse.
   - Opens as a compact repository card in a Codex conversation and expands into a fullscreen Git workbench
   - Matches Codex light and dark themes with compact native spacing and no extra inline-card height
   - Groups local branches, Worktrees, remote branches, and tags with independent expand/collapse state
-  - Reads or switches exact local and remote branches, renders up to 200 parent-topology commits, and shows complete commit details
+  - Reads or switches exact local and remote branches, renders up to 200 continuous parent-topology commits, and shows complete commit details
+  - Shows local/remote branch, tag, and MR/PR badges before each commit summary
+  - Lets every commit-table column resize by drag or keyboard; the default graph width follows only the newest 10 commits
   - Creates a local branch from an exact branch or tag without overwriting existing branches
   - Creates GitHub PRs or GitLab MRs through an authenticated `gh` or `glab` CLI without automatically pushing
   - Pulls only with `--ff-only` on a clean branch with an existing upstream

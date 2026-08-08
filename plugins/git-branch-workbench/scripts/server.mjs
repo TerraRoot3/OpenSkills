@@ -7,8 +7,8 @@ import { spawnSync } from "node:child_process";
 import readline from "node:readline";
 
 const SERVER_NAME = "git-branch-workbench";
-const SERVER_VERSION = "0.3.0";
-const TEMPLATE_URI = "ui://git-branch-workbench/v3.html";
+const SERVER_VERSION = "0.4.0";
+const TEMPLATE_URI = "ui://git-branch-workbench/v4.html";
 const DEFAULT_COMMIT_LIMIT = 200;
 const MAX_COMMIT_LIMIT = 200;
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -336,7 +336,7 @@ function parseCommits(rawLog) {
     .map((record) => record.trim())
     .filter(Boolean)
     .map((record) => {
-      const [hash, shortHash, parents, decorations, author, email, date, ...subjectParts] = record.split("\u001f");
+      const [hash, shortHash, parents, decorations, author, email, date, subject = "", ...bodyParts] = record.split("\u001f");
       const refs = (decorations || "")
         .replace(/^\s*\(|\)\s*$/g, "")
         .split(",")
@@ -350,7 +350,8 @@ function parseCommits(rawLog) {
         author,
         email,
         date,
-        subject: subjectParts.join("\u001f")
+        subject,
+        body: bodyParts.join("\u001f").trim()
       };
     });
 }
@@ -575,7 +576,7 @@ function getSnapshot(input = {}, operation = null) {
       `--max-count=${limit}`,
       "--date=iso-strict",
       "--decorate=short",
-      "--pretty=format:%H%x1f%h%x1f%P%x1f%D%x1f%an%x1f%ae%x1f%ad%x1f%s%x1e"
+      "--pretty=format:%H%x1f%h%x1f%P%x1f%D%x1f%an%x1f%ae%x1f%ad%x1f%s%x1f%b%x1e"
     ],
     { allowFailure: true }
   );
@@ -583,7 +584,7 @@ function getSnapshot(input = {}, operation = null) {
   const hosting = getHostingInfo(repoRoot, refs, status);
 
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     generatedAt: new Date().toISOString(),
     repoRoot,
     repoName: basename(repoRoot),
