@@ -82,7 +82,7 @@
   </header>
 
   <main id="gbw-main" class="gbw-main">
-    <aside class="gbw-branches" aria-label="分支列表">
+    <aside id="gbw-branches" class="gbw-branches" aria-label="分支列表">
       <div class="gbw-panel-heading">
         <h2>Git 引用</h2>
         <span id="gbw-branch-total" class="gbw-count">0</span>
@@ -139,6 +139,8 @@
 
       </div>
     </aside>
+
+    <span id="gbw-sidebar-resizer" class="gbw-sidebar-resizer" role="separator" aria-orientation="vertical" aria-label="调整分支列表宽度" aria-controls="gbw-branches" aria-valuemin="180" aria-valuemax="520" aria-valuenow="248" aria-valuetext="248 像素" tabindex="0"></span>
 
     <section id="gbw-history" class="gbw-history" aria-labelledby="gbw-history-heading">
       <div class="gbw-history-heading">
@@ -277,6 +279,7 @@
     --gbw-purple: light-dark(#7a61c9, #ab93ef);
     --gbw-radius: var(--border-radius-lg, 10px);
     --gbw-radius-sm: var(--border-radius-md, 7px);
+    --gbw-sidebar-width: 248px;
     --gbw-series-1: var(--color-text-info, light-dark(#2f7ed8, #83c3ff));
     --gbw-series-2: light-dark(#2f9d78, #63d0a7);
     --gbw-series-3: light-dark(#c27918, #efb45d);
@@ -375,8 +378,16 @@
   #git-branch-workbench .gbw-push { color: var(--gbw-blue); border-color: color-mix(in srgb, var(--gbw-blue) 38%, var(--gbw-border)); background: var(--gbw-blue-soft); }
   .gbw-action-count { font-variant-numeric: tabular-nums; }
 
-  .gbw-main { min-height: 0; display: grid; grid-template-columns: 248px minmax(0, 1fr); overflow: hidden; }
+  .gbw-main { position: relative; min-height: 0; display: grid; grid-template-columns: var(--gbw-sidebar-width) minmax(0, 1fr); overflow: hidden; }
   .gbw-branches { min-width: 0; min-height: 0; display: grid; grid-template-rows: 38px minmax(0, 1fr); overflow: hidden; border-right: 1px solid var(--gbw-border); background: var(--gbw-surface); }
+  .gbw-sidebar-resizer { position: absolute; z-index: 12; top: 0; bottom: 0; left: calc(var(--gbw-sidebar-width) - 5px); width: 10px; background: transparent; cursor: col-resize; touch-action: none; }
+  .gbw-sidebar-resizer::after { content: ""; position: absolute; top: 0; bottom: 0; left: 4px; width: 1px; background: var(--gbw-border-strong); opacity: 0; transition: background-color 120ms ease, opacity 120ms ease; }
+  .gbw-sidebar-resizer:hover::after,
+  .gbw-sidebar-resizer:focus-visible::after,
+  .gbw-sidebar-resizer.is-active::after { width: 2px; background: var(--gbw-blue); opacity: 1; }
+  .gbw-sidebar-resizer:focus-visible { box-shadow: inset 0 0 0 1px var(--gbw-blue); }
+  #git-branch-workbench.gbw-is-sidebar-resizing,
+  #git-branch-workbench.gbw-is-sidebar-resizing * { cursor: col-resize !important; user-select: none !important; }
   .gbw-panel-heading { padding: 0 13px 0 15px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--gbw-border); }
   #git-branch-workbench h2 { margin: 0; font-size: 13px; font-weight: 700; text-wrap: balance; }
   .gbw-count { min-width: 22px; color: var(--gbw-faint); font-size: 10px; text-align: right; font-variant-numeric: tabular-nums; }
@@ -516,7 +527,7 @@
     .gbw-toolbar { align-items: flex-start; }
     .gbw-title-line { flex-wrap: wrap; }
     .gbw-path { max-width: 48vw; }
-    .gbw-main { grid-template-columns: 220px minmax(520px, 1fr); overflow-x: auto; overflow-y: hidden; }
+    .gbw-main { grid-template-columns: var(--gbw-sidebar-width) minmax(520px, 1fr); overflow-x: auto; overflow-y: hidden; }
     .gbw-detail-meta { grid-template-columns: minmax(0, 1fr); }
     .gbw-form-fields { grid-template-columns: minmax(0, 1fr); gap: 5px; }
     .gbw-form-fields label:not(:first-child) { margin-top: 5px; }
@@ -533,6 +544,7 @@
   @media (prefers-reduced-motion: reduce) {
     .gbw-skip,
     #git-branch-workbench button,
+    .gbw-sidebar-resizer::after,
     .gbw-column-resizer::after { transition-duration: 0ms !important; }
   }
 </style>
@@ -550,6 +562,7 @@
     date: { min: 96, max: 300 },
     author: { min: 90, max: 420 }
   };
+  const sidebarLimits = { min: 180, max: 520, default: 248 };
   const savedColumnWidths = {};
   for (const key of columnKeys) {
     const value = Number(savedWidgetState.columnWidths?.[key]);
@@ -574,6 +587,11 @@
     columnResize: null,
     columnWidths: savedColumnWidths,
     appliedColumnWidths: null,
+    sidebarResizeFrame: null,
+    sidebarResize: null,
+    sidebarWidth: Number.isFinite(Number(savedWidgetState.sidebarWidth))
+      ? Number(savedWidgetState.sidebarWidth)
+      : sidebarLimits.default,
     intrinsicHeightFrame: null,
     forceIntrinsicHeightReport: false,
     lastIntrinsicHeight: null
@@ -621,7 +639,8 @@
       privateContent: {
         selectedHash: state.selectedHash,
         expandedGroups: state.expandedGroups,
-        columnWidths: state.columnWidths
+        columnWidths: state.columnWidths,
+        sidebarWidth: state.sidebarWidth
       }
     });
   }
@@ -1043,6 +1062,99 @@
       handle.addEventListener("pointerdown", startColumnResize);
       handle.addEventListener("keydown", handleColumnResizeKey);
     }
+  }
+
+  function clampSidebarWidth(width) {
+    return Math.max(sidebarLimits.min, Math.min(sidebarLimits.max, Math.round(width)));
+  }
+
+  function applySidebarWidth(width = state.sidebarWidth) {
+    const nextWidth = clampSidebarWidth(width);
+    state.sidebarWidth = nextWidth;
+    root.style.setProperty("--gbw-sidebar-width", `${nextWidth}px`);
+    const handle = $("#gbw-sidebar-resizer");
+    handle.setAttribute("aria-valuemin", String(sidebarLimits.min));
+    handle.setAttribute("aria-valuemax", String(sidebarLimits.max));
+    handle.setAttribute("aria-valuenow", String(nextWidth));
+    handle.setAttribute("aria-valuetext", `${nextWidth} 像素`);
+    handle.title = `拖动或使用方向键调整分支列表宽度；当前 ${nextWidth} 像素`;
+    return nextWidth;
+  }
+
+  function setSidebarWidth(width, persist = false) {
+    applySidebarWidth(width);
+    applyColumnWidths();
+    scheduleGraphDraw();
+    if (persist) persistWidgetState();
+  }
+
+  function stopSidebarResize(event) {
+    const resize = state.sidebarResize;
+    if (!resize) return;
+    if (event?.pointerId !== undefined && event.pointerId !== resize.pointerId) return;
+    if (state.sidebarResizeFrame !== null) {
+      cancelAnimationFrame(state.sidebarResizeFrame);
+      state.sidebarResizeFrame = null;
+    }
+    if (Number.isFinite(event?.clientX)) {
+      setSidebarWidth(resize.startWidth + event.clientX - resize.startX);
+    }
+    resize.handle.classList.remove("is-active");
+    root.classList.remove("gbw-is-sidebar-resizing");
+    document.removeEventListener("pointermove", resize.onMove);
+    document.removeEventListener("pointerup", stopSidebarResize);
+    document.removeEventListener("pointercancel", stopSidebarResize);
+    state.sidebarResize = null;
+    persistWidgetState();
+  }
+
+  function startSidebarResize(event) {
+    if (event.button !== 0) return;
+    stopSidebarResize();
+    const handle = event.currentTarget;
+    const resize = {
+      handle,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startWidth: state.sidebarWidth,
+      onMove: null
+    };
+    resize.onMove = (moveEvent) => {
+      if (moveEvent.pointerId !== resize.pointerId) return;
+      const nextWidth = resize.startWidth + moveEvent.clientX - resize.startX;
+      if (state.sidebarResizeFrame !== null) cancelAnimationFrame(state.sidebarResizeFrame);
+      state.sidebarResizeFrame = requestAnimationFrame(() => {
+        state.sidebarResizeFrame = null;
+        setSidebarWidth(nextWidth);
+      });
+    };
+    state.sidebarResize = resize;
+    handle.classList.add("is-active");
+    root.classList.add("gbw-is-sidebar-resizing");
+    document.addEventListener("pointermove", resize.onMove, { passive: true });
+    document.addEventListener("pointerup", stopSidebarResize);
+    document.addEventListener("pointercancel", stopSidebarResize);
+    event.preventDefault();
+  }
+
+  function handleSidebarResizeKey(event) {
+    let nextWidth = null;
+    if (event.key === "Home") nextWidth = sidebarLimits.min;
+    if (event.key === "End") nextWidth = sidebarLimits.max;
+    if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+      const step = event.shiftKey ? 40 : 16;
+      nextWidth = state.sidebarWidth + (event.key === "ArrowRight" ? step : -step);
+    }
+    if (nextWidth === null) return;
+    setSidebarWidth(nextWidth, true);
+    event.preventDefault();
+  }
+
+  function initializeSidebarResizer() {
+    const handle = $("#gbw-sidebar-resizer");
+    handle.addEventListener("pointerdown", startSidebarResize);
+    handle.addEventListener("keydown", handleSidebarResizeKey);
+    applySidebarWidth();
   }
 
   function graphY(position, rowCenters) {
@@ -1856,6 +1968,7 @@
     scheduleIntrinsicHeightReport();
   }, { passive: true });
 
+  initializeSidebarResizer();
   initializeColumnResizers();
   applyColumnWidths();
   applyHostContext(window.openai?.hostContext || { theme: window.openai?.theme, styles: window.openai?.styles });
