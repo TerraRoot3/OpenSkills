@@ -1,0 +1,20 @@
+{
+  "name": "openskills",
+  "interface": {
+    "displayName": "OpenSkills"
+  },
+  "plugins": [
+    {
+      "name": "git-branch-workbench",
+      "source": {
+        "source": "local",
+        "path": "./plugins/git-branch-workbench"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

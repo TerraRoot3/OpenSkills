@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "git-branch-workbench": {
+      "command": "node",
+      "args": ["./scripts/server.mjs"],
+      "cwd": "."
+    }
+  }
+}

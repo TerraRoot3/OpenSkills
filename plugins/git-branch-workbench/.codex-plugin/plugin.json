@@ -1,0 +1,36 @@
+{
+  "name": "git-branch-workbench",
+  "version": "0.1.0",
+  "description": "Open a Codex-native local Git branch workbench with OpenGit-style history.",
+  "author": {
+    "name": "Han Baokun"
+  },
+  "license": "MIT",
+  "keywords": [
+    "git",
+    "branches",
+    "graph",
+    "worktree",
+    "codex"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Git Branch Workbench",
+    "shortDescription": "\u5728 Codex \u4e2d\u7ba1\u7406\u5206\u652f\u5e76\u67e5\u770b OpenGit \u98ce\u683c\u63d0\u4ea4\u56fe\u3002",
+    "longDescription": "\u5bf9\u8bdd\u4e2d\u5148\u663e\u793a\u7d27\u51d1\u4ed3\u5e93\u5361\u7247\uff0c\u5c55\u5f00\u540e\u8fdb\u5165\u4e0e Codex \u6d45\u8272\u548c\u6df1\u8272\u4e3b\u9898\u4e00\u81f4\u7684 Git \u5de5\u4f5c\u53f0\u3002\u5de6\u4fa7\u5206\u7ec4\u6d4f\u89c8\u672c\u5730\u5206\u652f\u3001\u8fdc\u7aef\u5206\u652f\u3001\u6807\u7b7e\u548c Worktree\uff0c\u652f\u6301\u6298\u53e0\u3001\u67e5\u770b\u5386\u53f2\u4ee5\u53ca\u5b89\u5168\u5207\u6362\u672c\u5730\u6216\u8fdc\u7aef\u5206\u652f\uff1b\u53f3\u4fa7\u663e\u793a\u6700\u591a 200 \u6761\u771f\u5b9e\u7236\u63d0\u4ea4\u62d3\u6251\u3001\u63d0\u4ea4\u8868\u683c\u548c\u8be6\u60c5\u3002\u652f\u6301\u4ece\u7cbe\u786e\u5f15\u7528\u521b\u5efa\u5206\u652f\uff0c\u4ee5\u53ca\u901a\u8fc7\u5df2\u767b\u5f55\u7684 gh \u6216 glab \u521b\u5efa MR/PR\u3002\u5206\u652f\u5207\u6362\u548c\u521b\u5efa\u8981\u6c42\u5e72\u51c0\u5de5\u4f5c\u533a\uff1b\u62c9\u53d6\u4ec5\u5141\u8bb8 fast-forward\uff1b\u63a8\u9001\u4ec5\u4f7f\u7528\u65e2\u6709 upstream \u4e14\u7981\u6b62 force push\uff1bMR/PR \u4e0d\u4f1a\u81ea\u52a8\u63a8\u9001\u3002",
+    "developerName": "Han Baokun",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "\u6253\u5f00\u5f53\u524d\u4ed3\u5e93\u7684 Git \u5206\u652f\u56fe",
+      "\u67e5\u770b\u672c\u5730\u548c\u8fdc\u7aef\u5206\u652f\u3001\u6807\u7b7e\u3001Worktree \u4e0e\u6700\u8fd1\u63d0\u4ea4",
+      "\u5728 Git Branch Workbench \u4e2d\u5207\u6362\u6216\u521b\u5efa\u5206\u652f"
+    ],
+    "brandColor": "#339CFF"
+  }
+}

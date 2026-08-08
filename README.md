@@ -5,6 +5,8 @@ Shared Codex skills for cross-machine installation and team reuse.
 ## Structure
 
 - `skills/<skill-name>/`: one installable Codex skill per directory
+- `plugins/<plugin-name>/`: one installable Codex plugin per directory
+- `.agents/plugins/marketplace.json`: Codex plugin marketplace index for this repository
 
 ## Current Skills
 
@@ -36,6 +38,18 @@ Shared Codex skills for cross-machine installation and team reuse.
   - Cleans only confirmed safe items by default; larger review/risky items require explicit candidate selection
   - Reports project-local generated artifacts without deleting user projects or workspaces
 
+## Current Plugins
+
+- `git-branch-workbench`
+  - Opens as a compact repository card in a Codex conversation and expands into a fullscreen Git workbench
+  - Matches Codex light and dark themes with compact native spacing and no extra inline-card height
+  - Groups local branches, remote branches, tags, and Worktrees with independent expand/collapse state
+  - Reads or switches exact local and remote branches, renders up to 200 parent-topology commits, and shows complete commit details
+  - Creates a local branch from an exact branch or tag without overwriting existing branches
+  - Creates GitHub PRs or GitLab MRs through an authenticated `gh` or `glab` CLI without automatically pushing
+  - Pulls only with `--ff-only` on a clean branch with an existing upstream
+  - Pushes only `HEAD` to the existing upstream; never sets upstream or force-pushes
+
 ## Install Example
 
 On another machine, install this skill from the repo path:
@@ -45,3 +59,12 @@ python3 ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-githu
 ```
 
 If the repository is private, make sure git or GitHub credentials are available first.
+
+To install the Git Branch Workbench plugin from this repository:
+
+```bash
+codex plugin marketplace add TerraRoot3/OpenSkills --ref main
+codex plugin add git-branch-workbench@openskills
+```
+
+Start a new Codex task after installation so the plugin's Skill and MCP tools are discovered.

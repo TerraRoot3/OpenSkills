@@ -1,0 +1,1576 @@
+<meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#11151c">
+
+<div id="git-branch-workbench" data-display-mode="inline">
+  <section class="gbw-inline-card" aria-labelledby="gbw-card-title">
+    <div class="gbw-card-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><path d="M5 4.75h5.2l1.65 2H19a2 2 0 0 1 2 2v8.5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6.75a2 2 0 0 1 2-2Z"/></svg>
+    </div>
+    <div class="gbw-card-copy">
+      <div class="gbw-card-title-line">
+        <h2 id="gbw-card-title">Git Branch Workbench</h2>
+        <span id="gbw-card-dirty" class="gbw-worktree-state">读取中…</span>
+      </div>
+      <div class="gbw-card-branch">
+        <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2.2"/><circle cx="6" cy="19" r="2.2"/><circle cx="18" cy="7" r="2.2"/><path d="M6 7.2v9.6M8.2 15.5c5.6 0 9.8-2.6 9.8-6.3"/></svg>
+        <strong id="gbw-card-current" translate="no">—</strong>
+        <span id="gbw-card-summary" class="gbw-card-summary">0 个本地分支 · 0 条提交</span>
+      </div>
+      <p id="gbw-card-path" class="gbw-card-path" translate="no">等待仓库数据…</p>
+    </div>
+    <button id="gbw-open-workbench" type="button" class="gbw-card-open">
+      打开工作台
+      <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg>
+    </button>
+  </section>
+
+  <a class="gbw-skip" href="#gbw-history">跳到提交记录</a>
+
+  <header class="gbw-toolbar">
+    <div class="gbw-repo-block">
+      <div class="gbw-repo-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M5 4.75h5.2l1.65 2H19a2 2 0 0 1 2 2v8.5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6.75a2 2 0 0 1 2-2Z"/></svg>
+      </div>
+      <div class="gbw-repo-copy">
+        <div class="gbw-title-line">
+          <h1 id="gbw-title">Git Branch Workbench</h1>
+          <span class="gbw-current-branch" title="当前工作区分支">
+            <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2.2"/><circle cx="6" cy="19" r="2.2"/><circle cx="18" cy="7" r="2.2"/><path d="M6 7.2v9.6M8.2 15.5c5.6 0 9.8-2.6 9.8-6.3"/></svg>
+            <strong id="gbw-current">—</strong>
+          </span>
+          <span id="gbw-dirty" class="gbw-worktree-state">读取中…</span>
+          <span id="gbw-sync" class="gbw-sync-state" hidden></span>
+        </div>
+        <p id="gbw-path" class="gbw-path" translate="no">等待仓库数据…</p>
+      </div>
+    </div>
+
+    <div class="gbw-toolbar-actions" aria-label="Git 操作">
+      <button id="gbw-refresh" type="button" class="gbw-icon-button" aria-label="刷新分支和提交" title="刷新分支和提交">
+        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 6v5h-5M4 18v-5h5M18.4 9a7 7 0 0 0-11.7-2.6L4 9m16 6-2.7 2.6A7 7 0 0 1 5.6 15"/></svg>
+      </button>
+      <button id="gbw-new-branch" type="button" class="gbw-action gbw-secondary-action">
+        <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><path d="M6 7v10M14 6v8M10 10h8"/></svg>
+        新建分支
+      </button>
+      <button id="gbw-new-mr" type="button" class="gbw-action gbw-secondary-action">
+        <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2"/><circle cx="18" cy="19" r="2"/><path d="M6 7v12M18 17V9a4 4 0 0 0-4-4h-3M8 17l-2 2-2-2"/></svg>
+        MR/PR
+      </button>
+      <button id="gbw-pull" type="button" class="gbw-action gbw-pull">
+        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 4v12M7.5 11.5 12 16l4.5-4.5M5 20h14"/></svg>
+        拉取
+        <span id="gbw-pull-count" class="gbw-action-count" hidden></span>
+      </button>
+      <button id="gbw-push" type="button" class="gbw-action gbw-push">
+        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 20V8M7.5 12.5 12 8l4.5 4.5M5 4h14"/></svg>
+        推送
+        <span id="gbw-push-count" class="gbw-action-count" hidden></span>
+      </button>
+      <button id="gbw-fullscreen" type="button" class="gbw-icon-button" aria-label="全屏打开" title="全屏打开">
+        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main id="gbw-main" class="gbw-main">
+    <aside class="gbw-branches" aria-label="分支列表">
+      <div class="gbw-panel-heading">
+        <h2>Git 引用</h2>
+        <span id="gbw-branch-total" class="gbw-count">0</span>
+      </div>
+
+      <div class="gbw-branch-scroll">
+        <section class="gbw-branch-group" aria-labelledby="gbw-local-heading">
+          <button type="button" class="gbw-group-heading" data-group-toggle="local" aria-expanded="true" aria-controls="gbw-local-list">
+            <span id="gbw-local-heading" class="gbw-group-title">
+              <svg class="gbw-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>
+              <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10M8 15c5.7 0 10-2.5 10-6"/></svg>
+              本地分支
+            </span>
+            <span id="gbw-local-count" class="gbw-count">0</span>
+          </button>
+          <div id="gbw-local-list" class="gbw-branch-list"></div>
+        </section>
+
+        <section class="gbw-branch-group" aria-labelledby="gbw-remote-heading">
+          <button type="button" class="gbw-group-heading" data-group-toggle="remote" aria-expanded="false" aria-controls="gbw-remote-list">
+            <span id="gbw-remote-heading" class="gbw-group-title">
+              <svg class="gbw-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M7 18h10a4 4 0 0 0 .8-7.9A6 6 0 0 0 6.3 8.7 4.5 4.5 0 0 0 7 18Z"/></svg>
+              远端分支
+            </span>
+            <span id="gbw-remote-count" class="gbw-count">0</span>
+          </button>
+          <div id="gbw-remote-list" class="gbw-branch-list" hidden></div>
+        </section>
+
+        <section class="gbw-branch-group" aria-labelledby="gbw-tag-heading">
+          <button type="button" class="gbw-group-heading" data-group-toggle="tags" aria-expanded="false" aria-controls="gbw-tag-list">
+            <span id="gbw-tag-heading" class="gbw-group-title">
+              <svg class="gbw-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 4h7l9 9-7 7-9-9V4Z"/><circle cx="8.5" cy="8.5" r="1"/></svg>
+              标签
+            </span>
+            <span id="gbw-tag-count" class="gbw-count">0</span>
+          </button>
+          <div id="gbw-tag-list" class="gbw-branch-list" hidden></div>
+        </section>
+
+        <section class="gbw-branch-group" aria-labelledby="gbw-worktree-heading">
+          <button type="button" class="gbw-group-heading" data-group-toggle="worktrees" aria-expanded="false" aria-controls="gbw-worktree-list">
+            <span id="gbw-worktree-heading" class="gbw-group-title">
+              <svg class="gbw-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>
+              <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 7h.01M7 17h.01"/></svg>
+              Worktree
+            </span>
+            <span id="gbw-worktree-count" class="gbw-count">0</span>
+          </button>
+          <div id="gbw-worktree-list" class="gbw-branch-list" hidden></div>
+        </section>
+      </div>
+
+      <p class="gbw-switch-hint">选择引用查看历史；右侧按钮可切换本地或远端分支。</p>
+    </aside>
+
+    <section id="gbw-history" class="gbw-history" aria-labelledby="gbw-history-heading">
+      <div class="gbw-history-heading">
+        <div class="gbw-history-title">
+          <span id="gbw-ref-type" class="gbw-ref-type">本地</span>
+          <h2 id="gbw-history-heading" translate="no">—</h2>
+        </div>
+        <span id="gbw-commit-count" class="gbw-history-count">0 条提交</span>
+      </div>
+
+      <div id="gbw-empty" class="gbw-empty">正在读取 Git 历史…</div>
+      <div id="gbw-table-shell" class="gbw-table-shell" hidden>
+        <div class="gbw-table-scroll">
+          <div class="gbw-table-wrap">
+            <svg id="gbw-graph" class="gbw-graph" aria-label="Git 提交图"></svg>
+            <table class="gbw-commit-table">
+              <thead>
+                <tr>
+                  <th class="gbw-graph-column" scope="col">图形</th>
+                  <th scope="col">提交</th>
+                  <th class="gbw-hash-column" scope="col">哈希</th>
+                  <th class="gbw-date-column" scope="col">日期</th>
+                  <th class="gbw-author-column" scope="col">作者</th>
+                </tr>
+              </thead>
+              <tbody id="gbw-commits"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <section id="gbw-detail" class="gbw-detail" aria-labelledby="gbw-detail-heading">
+          <div class="gbw-detail-title">
+            <h3 id="gbw-detail-heading">提交详情</h3>
+          </div>
+          <div class="gbw-detail-message">
+            <span>说明</span>
+            <p id="gbw-detail-subject" class="gbw-detail-subject">选择一条提交查看详情。</p>
+          </div>
+          <dl id="gbw-detail-meta" class="gbw-detail-meta"></dl>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <div id="gbw-notice" class="gbw-notice" role="status" aria-live="polite" hidden></div>
+
+  <dialog id="gbw-create-branch" class="gbw-form-dialog" aria-labelledby="gbw-create-branch-title">
+    <form id="gbw-create-branch-form">
+      <div class="gbw-form-dialog-header">
+        <h2 id="gbw-create-branch-title">新建并切换分支</h2>
+        <p>从当前快照中的精确分支或标签创建，不会覆盖已有本地分支。</p>
+      </div>
+      <div class="gbw-form-fields">
+        <label for="gbw-branch-base">创建基准</label>
+        <select id="gbw-branch-base" name="branch_base" autocomplete="off"></select>
+        <label for="gbw-branch-name">新分支名称</label>
+        <input id="gbw-branch-name" name="branch_name" type="text" autocomplete="off" spellcheck="false" placeholder="例如 feature/login…" required>
+      </div>
+      <div class="gbw-form-actions">
+        <button id="gbw-create-branch-cancel" type="button">取消</button>
+        <button type="submit" class="gbw-primary-button">创建并切换</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="gbw-create-mr" class="gbw-form-dialog" aria-labelledby="gbw-create-mr-title">
+    <form id="gbw-create-mr-form">
+      <div class="gbw-form-dialog-header">
+        <h2 id="gbw-create-mr-title">创建 MR/PR</h2>
+        <p id="gbw-mr-provider">使用本机已登录的 gh 或 glab；不会自动推送分支。</p>
+      </div>
+      <div class="gbw-form-fields">
+        <label for="gbw-mr-source">源本地分支</label>
+        <select id="gbw-mr-source" name="source_branch" autocomplete="off"></select>
+        <label for="gbw-mr-target">目标远端分支</label>
+        <select id="gbw-mr-target" name="target_branch" autocomplete="off"></select>
+        <label for="gbw-mr-title-input">标题</label>
+        <input id="gbw-mr-title-input" name="mr_title" type="text" maxlength="200" autocomplete="off" placeholder="概括这次变更…" required>
+        <label for="gbw-mr-description">描述</label>
+        <textarea id="gbw-mr-description" name="mr_description" rows="4" maxlength="10000" autocomplete="off" placeholder="补充背景、改动和验证结果…"></textarea>
+      </div>
+      <div class="gbw-form-actions">
+        <button id="gbw-create-mr-cancel" type="button">取消</button>
+        <button type="submit" class="gbw-primary-button">确认创建</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="gbw-confirm" class="gbw-confirm">
+    <form method="dialog">
+      <div class="gbw-confirm-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M12 3 2.8 20h18.4L12 3Z"/><path d="M12 9v5M12 17.5v.1"/></svg>
+      </div>
+      <div class="gbw-confirm-copy">
+        <h2 id="gbw-confirm-title">确认操作</h2>
+        <p id="gbw-confirm-message"></p>
+      </div>
+      <div class="gbw-confirm-actions">
+        <button id="gbw-confirm-cancel" type="submit" value="cancel">取消</button>
+        <button id="gbw-confirm-submit" type="submit" value="confirm" class="gbw-confirm-submit">确认</button>
+      </div>
+    </form>
+  </dialog>
+</div>
+
+<style>
+  :root { color-scheme: light dark; }
+  html, body { width: 100%; height: 100%; min-height: 0; margin: 0; overflow: hidden; }
+
+  #git-branch-workbench {
+    --gbw-bg: var(--color-background-primary, light-dark(rgb(255 255 255), rgb(24 24 24)));
+    --gbw-surface: var(--color-background-primary, light-dark(rgb(255 255 255), rgb(24 24 24)));
+    --gbw-surface-raised: var(--color-background-secondary, light-dark(rgb(255 255 255), rgb(45 45 45)));
+    --gbw-surface-soft: color-mix(in srgb, var(--gbw-text) 4.5%, var(--gbw-bg));
+    --gbw-surface-hover: color-mix(in srgb, var(--gbw-text) 7%, var(--gbw-bg));
+    --gbw-text: var(--color-text-primary, light-dark(rgb(26 28 31), rgb(255 255 255)));
+    --gbw-muted: var(--color-text-secondary, light-dark(rgb(26 28 31 / 62%), rgb(255 255 255 / 62%)));
+    --gbw-faint: var(--color-text-tertiary, light-dark(rgb(26 28 31 / 46%), rgb(255 255 255 / 46%)));
+    --gbw-border: var(--color-border-secondary, light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%)));
+    --gbw-border-strong: var(--color-border-primary, light-dark(rgb(26 28 31 / 14%), rgb(255 255 255 / 15%)));
+    --gbw-blue: var(--color-text-info, light-dark(rgb(51 156 255), rgb(131 195 255)));
+    --gbw-blue-soft: var(--color-background-info, light-dark(rgb(229 242 255), rgb(13 39 63)));
+    --gbw-amber: var(--color-text-warning, light-dark(rgb(196 92 7), rgb(255 153 82)));
+    --gbw-amber-soft: var(--color-background-warning, light-dark(rgb(255 246 222), rgb(55 36 20)));
+    --gbw-green: var(--color-text-success, light-dark(rgb(0 145 58), rgb(64 201 119)));
+    --gbw-green-soft: var(--color-background-success, light-dark(rgb(230 248 237), rgb(18 48 31)));
+    --gbw-red: var(--color-text-danger, light-dark(rgb(210 47 42), rgb(255 103 100)));
+    --gbw-radius: var(--border-radius-lg, 10px);
+    --gbw-radius-sm: var(--border-radius-md, 7px);
+    --gbw-series-1: var(--color-text-info, light-dark(#2f7ed8, #83c3ff));
+    --gbw-series-2: light-dark(#2f9d78, #63d0a7);
+    --gbw-series-3: light-dark(#c27918, #efb45d);
+    --gbw-series-4: light-dark(#c95173, #ed86a3);
+    --gbw-series-5: light-dark(#7a61c9, #ab93ef);
+    box-sizing: border-box;
+    color: var(--gbw-text);
+    background: var(--gbw-bg);
+    width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    font-size: var(--font-text-sm-size, 13px);
+    font-weight: 430;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  #git-branch-workbench:not([data-display-mode="inline"]) {
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+
+  #git-branch-workbench * { box-sizing: border-box; }
+  #git-branch-workbench [hidden] { display: none !important; }
+  #git-branch-workbench svg:not(.gbw-graph) { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  #git-branch-workbench button { touch-action: manipulation; }
+  #git-branch-workbench button:focus-visible,
+  #git-branch-workbench a:focus-visible { outline: 2px solid var(--gbw-blue); outline-offset: 2px; }
+
+  #git-branch-workbench[data-display-mode="inline"] { height: auto; min-height: 0; display: block; overflow: visible; background: transparent; }
+  #git-branch-workbench[data-display-mode="inline"] > :not(.gbw-inline-card) { display: none !important; }
+  .gbw-inline-card { display: none; }
+  #git-branch-workbench[data-display-mode="inline"] .gbw-inline-card { min-width: 0; padding: 9px 10px; display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; align-items: center; gap: 9px; border: 1px solid var(--gbw-border); border-radius: var(--gbw-radius); color: var(--gbw-text); background: var(--gbw-surface); box-shadow: 0 1px 2px rgb(0 0 0 / .05); }
+  .gbw-card-icon { width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid var(--gbw-border); border-radius: var(--gbw-radius-sm); color: var(--gbw-blue); background: var(--gbw-blue-soft); }
+  .gbw-card-icon svg { width: 17px; height: 17px; }
+  .gbw-card-copy { min-width: 0; }
+  .gbw-card-title-line { min-width: 0; display: flex; align-items: center; gap: 8px; }
+  #git-branch-workbench .gbw-card-title-line h2 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--gbw-text); font-size: 12px; }
+  .gbw-card-branch { min-width: 0; margin-top: 3px; display: flex; align-items: center; gap: 5px; color: var(--gbw-muted); }
+  .gbw-card-branch svg { width: 13px; height: 13px; flex: none; }
+  .gbw-card-branch strong { min-width: 0; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--gbw-text); font: 650 11px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .gbw-card-summary { flex: none; color: var(--gbw-faint); font-size: 9px; font-variant-numeric: tabular-nums; }
+  .gbw-card-path { max-width: 560px; margin: 2px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--gbw-faint); font: 8px/1.25 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  #git-branch-workbench .gbw-card-open { height: 30px; padding: 0 9px; border: 1px solid color-mix(in srgb, var(--gbw-blue) 38%, var(--gbw-border)); border-radius: var(--gbw-radius-sm); display: inline-flex; align-items: center; gap: 5px; color: var(--gbw-blue); background: var(--gbw-blue-soft); cursor: pointer; font: 620 10px/1 inherit; transition: border-color 120ms ease, background-color 120ms ease, transform 120ms ease; }
+  #git-branch-workbench .gbw-card-open:hover { border-color: var(--gbw-blue); background: var(--gbw-surface-hover); }
+  #git-branch-workbench .gbw-card-open:active { transform: translateY(1px); }
+  .gbw-card-open svg { width: 14px; height: 14px; }
+
+  .gbw-skip { position: fixed; z-index: 50; left: 12px; top: 8px; padding: 8px 12px; border-radius: 7px; color: #fff; background: #1f5fd1; transform: translateY(-160%); transition: transform 120ms ease; }
+  .gbw-skip:focus-visible { transform: translateY(0); }
+
+  .gbw-toolbar { min-height: 58px; padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; gap: 14px; border-bottom: 1px solid var(--gbw-border); background: var(--gbw-surface); }
+  .gbw-repo-block { display: flex; align-items: center; gap: 9px; min-width: 0; }
+  .gbw-repo-icon { width: 31px; height: 31px; flex: none; display: grid; place-items: center; border: 1px solid var(--gbw-border); border-radius: var(--gbw-radius-sm); color: var(--gbw-blue); background: var(--gbw-blue-soft); }
+  .gbw-repo-icon svg { width: 17px; height: 17px; }
+  .gbw-repo-copy { min-width: 0; }
+  .gbw-title-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  #git-branch-workbench h1 { margin: 0; max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; line-height: 1.25; font-weight: 650; text-wrap: balance; }
+  .gbw-current-branch { min-width: 0; display: inline-flex; align-items: center; gap: 5px; color: var(--gbw-muted); }
+  .gbw-current-branch svg { width: 15px; height: 15px; }
+  .gbw-current-branch strong { max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--gbw-text); font: 650 12px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .gbw-worktree-state, .gbw-sync-state { flex: none; padding: 1px 5px; border-radius: 999px; color: var(--gbw-muted); background: var(--gbw-surface-soft); font-size: 9px; line-height: 1.45; font-variant-numeric: tabular-nums; }
+  .gbw-worktree-state.is-dirty { color: var(--gbw-amber); background: var(--gbw-amber-soft); }
+  .gbw-sync-state { color: var(--gbw-green); }
+  .gbw-path { max-width: min(650px, 56vw); margin: 2px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--gbw-faint); font: 9px/1.25 ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+  .gbw-toolbar-actions { display: flex; align-items: center; gap: 5px; flex: none; }
+  #git-branch-workbench .gbw-toolbar-actions button { height: 30px; border: 1px solid var(--gbw-border-strong); border-radius: var(--gbw-radius-sm); color: var(--gbw-text); background: var(--gbw-surface-raised); cursor: pointer; font: 620 11px/1 inherit; transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease, transform 120ms ease; }
+  #git-branch-workbench .gbw-toolbar-actions button:hover:not(:disabled) { border-color: var(--gbw-blue); background: var(--gbw-surface-hover); }
+  #git-branch-workbench .gbw-toolbar-actions button:active:not(:disabled) { transform: translateY(1px); }
+  #git-branch-workbench .gbw-toolbar-actions button:disabled { opacity: .45; cursor: not-allowed; }
+  #git-branch-workbench .gbw-icon-button { width: 30px; padding: 0; display: grid; place-items: center; }
+  #git-branch-workbench .gbw-icon-button svg { width: 16px; height: 16px; }
+  #git-branch-workbench .gbw-action { min-width: 67px; padding: 0 9px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+  #git-branch-workbench .gbw-action svg { width: 15px; height: 15px; }
+  #git-branch-workbench .gbw-pull { color: var(--gbw-amber); border-color: color-mix(in srgb, var(--gbw-amber) 38%, var(--gbw-border)); background: var(--gbw-amber-soft); }
+  #git-branch-workbench .gbw-push { color: var(--gbw-blue); border-color: color-mix(in srgb, var(--gbw-blue) 38%, var(--gbw-border)); background: var(--gbw-blue-soft); }
+  .gbw-action-count { font-variant-numeric: tabular-nums; }
+
+  .gbw-main { min-height: 0; display: grid; grid-template-columns: 248px minmax(0, 1fr); overflow: hidden; }
+  .gbw-branches { min-width: 0; min-height: 0; display: grid; grid-template-rows: 38px minmax(0, 1fr) auto; overflow: hidden; border-right: 1px solid var(--gbw-border); background: var(--gbw-surface); }
+  .gbw-panel-heading { padding: 0 13px 0 15px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--gbw-border); }
+  #git-branch-workbench h2 { margin: 0; font-size: 13px; font-weight: 700; text-wrap: balance; }
+  .gbw-count { min-width: 22px; color: var(--gbw-faint); font-size: 10px; text-align: right; font-variant-numeric: tabular-nums; }
+  .gbw-branch-scroll { min-height: 0; padding: 4px 5px 9px; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+  .gbw-branch-group + .gbw-branch-group { margin-top: 4px; }
+  #git-branch-workbench .gbw-group-heading { width: 100%; height: 28px; padding: 0 6px; border: 0; border-radius: 6px; display: flex; align-items: center; justify-content: space-between; color: var(--gbw-muted); background: transparent; cursor: pointer; font: 620 10px/1 inherit; text-align: left; }
+  #git-branch-workbench .gbw-group-heading:hover { color: var(--gbw-text); background: var(--gbw-surface-hover); }
+  .gbw-group-title { min-width: 0; display: flex; align-items: center; gap: 5px; }
+  .gbw-group-title svg { width: 13px; height: 13px; flex: none; }
+  .gbw-group-title .gbw-chevron { width: 10px; height: 10px; transition: transform 120ms ease; }
+  .gbw-group-heading[aria-expanded="true"] .gbw-chevron { transform: rotate(90deg); }
+  .gbw-branch-list { display: grid; gap: 1px; }
+  .gbw-branch-row { min-width: 0; display: flex; align-items: stretch; border: 1px solid transparent; border-radius: 7px; overflow: hidden; }
+  .gbw-branch-row:hover { background: var(--gbw-surface-hover); }
+  .gbw-branch-row.is-selected { border-color: color-mix(in srgb, var(--gbw-blue) 35%, transparent); background: var(--gbw-blue-soft); }
+  .gbw-branch-row.is-current { background: var(--gbw-surface-soft); }
+  .gbw-branch-row.is-current.is-selected { background: var(--gbw-blue-soft); }
+  #git-branch-workbench .gbw-branch-main { min-width: 0; flex: 1; min-height: 30px; padding: 0 4px 0 7px; border: 0; display: flex; align-items: center; gap: 6px; color: var(--gbw-text); background: transparent; cursor: pointer; text-align: left; }
+  .gbw-branch-dot { width: 7px; height: 7px; flex: none; border: 2px solid var(--gbw-faint); border-radius: 50%; }
+  .is-current .gbw-branch-dot { border-color: var(--gbw-green); background: var(--gbw-green); box-shadow: 0 0 0 3px color-mix(in srgb, var(--gbw-green) 15%, transparent); }
+  .gbw-branch-name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 11px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .is-current .gbw-branch-name { font-weight: 700; }
+  .gbw-branch-sync { flex: none; display: inline-flex; gap: 4px; color: var(--gbw-faint); font-size: 9px; font-variant-numeric: tabular-nums; }
+  .gbw-branch-sync .up { color: var(--gbw-green); }
+  .gbw-branch-sync .down { color: var(--gbw-amber); }
+  #git-branch-workbench .gbw-branch-switch { width: 29px; flex: none; border: 0; border-left: 1px solid transparent; display: grid; place-items: center; color: var(--gbw-faint); background: transparent; cursor: pointer; opacity: 0; transition: opacity 100ms ease, color 100ms ease, background-color 100ms ease; }
+  #git-branch-workbench .gbw-branch-switch:hover { color: var(--gbw-blue); background: color-mix(in srgb, var(--gbw-blue) 10%, transparent); }
+  .gbw-branch-row:hover .gbw-branch-switch,
+  .gbw-branch-switch:focus-visible,
+  .gbw-branch-row.is-selected .gbw-branch-switch { opacity: 1; }
+  .gbw-branch-switch svg { width: 14px; height: 14px; }
+  .gbw-current-mark { width: 29px; display: grid; place-items: center; color: var(--gbw-green); font-size: 11px; }
+  .gbw-ref-meta { max-width: 72px; flex: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--gbw-faint); font-size: 8px; }
+  .gbw-worktree-main { align-items: flex-start !important; padding-block: 5px !important; }
+  .gbw-worktree-copy { min-width: 0; flex: 1; display: grid; gap: 2px; }
+  .gbw-worktree-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--gbw-faint); font: 8px/1.25 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .gbw-list-empty { padding: 9px 7px; color: var(--gbw-faint); font-size: 10px; }
+  .gbw-switch-hint { margin: 0; padding: 7px 10px 8px; border-top: 1px solid var(--gbw-border); color: var(--gbw-faint); font-size: 8px; line-height: 1.4; }
+
+  .gbw-history { min-width: 0; min-height: 0; display: grid; grid-template-rows: 38px minmax(0, 1fr); background: var(--gbw-surface); }
+  .gbw-history-heading { padding: 0 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--gbw-border); }
+  .gbw-history-title { min-width: 0; display: flex; align-items: center; gap: 8px; }
+  .gbw-history-title h2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 680 12px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .gbw-ref-type { flex: none; padding: 2px 6px; border-radius: 5px; color: var(--gbw-blue); background: var(--gbw-blue-soft); font-size: 9px; }
+  .gbw-history-count { flex: none; color: var(--gbw-faint); font-size: 10px; font-variant-numeric: tabular-nums; }
+  .gbw-empty { display: grid; place-items: center; color: var(--gbw-muted); font-size: 12px; }
+  .gbw-table-shell { min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+  .gbw-table-scroll { min-height: 0; flex: 1 1 auto; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+  .gbw-table-wrap { position: relative; min-width: 760px; }
+  .gbw-commit-table { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+  .gbw-commit-table th { position: sticky; z-index: 3; top: 0; height: 30px; padding: 0 8px; border-bottom: 1px solid var(--gbw-border); color: var(--gbw-faint); background: var(--gbw-surface-soft); font-size: 8px; font-weight: 620; text-align: left; }
+  .gbw-commit-table td { height: 44px; padding: 0 8px; border-bottom: 1px solid var(--gbw-border); color: var(--gbw-muted); font-size: 9px; vertical-align: middle; font-variant-numeric: tabular-nums; }
+  .gbw-commit-table tbody tr { content-visibility: auto; contain-intrinsic-size: auto 44px; }
+  .gbw-commit-table tbody tr:hover td,
+  .gbw-commit-table tbody tr.is-selected td { background: var(--gbw-surface-hover); }
+  .gbw-commit-table tbody tr.is-selected td { box-shadow: inset 0 1px 0 color-mix(in srgb, var(--gbw-blue) 28%, transparent), inset 0 -1px 0 color-mix(in srgb, var(--gbw-blue) 28%, transparent); }
+  .gbw-graph-column { width: var(--gbw-graph-width, 72px); }
+  .gbw-hash-column { width: 82px; }
+  .gbw-date-column { width: 118px; }
+  .gbw-author-column { width: 130px; }
+  .gbw-graph-cell { width: var(--gbw-graph-width, 72px); }
+  #git-branch-workbench .gbw-graph { position: absolute; z-index: 2; left: 0; top: 0; width: var(--gbw-graph-width, 72px); height: auto; display: block; pointer-events: none; overflow: visible; }
+  .gbw-graph-ring { opacity: 0; }
+  .gbw-graph-node.is-selected .gbw-graph-ring { opacity: .28; }
+  .gbw-commit-cell { min-width: 0; }
+  #git-branch-workbench .gbw-commit-select { width: 100%; min-width: 0; padding: 5px 0; border: 0; display: block; color: var(--gbw-text); background: transparent; cursor: pointer; text-align: left; }
+  .gbw-commit-subject { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 600; }
+  .gbw-refs { margin-top: 3px; display: flex; gap: 4px; overflow: hidden; }
+  .gbw-ref { display: inline-block; max-width: 150px; padding: 1px 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 1px solid color-mix(in srgb, var(--gbw-blue) 30%, transparent); border-radius: 4px; color: var(--gbw-blue); background: var(--gbw-blue-soft); font-size: 8px; }
+  .gbw-code, .gbw-date, .gbw-author { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .gbw-code { color: var(--gbw-faint); font: 9px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .gbw-author { color: var(--gbw-muted); }
+
+  .gbw-detail { min-height: 96px; max-height: min(200px, 34dvh); flex: 0 0 auto; padding: 8px 12px 9px; overflow: auto; overscroll-behavior: contain; border-top: 1px solid var(--gbw-border-strong); background: var(--gbw-surface-soft); scrollbar-gutter: stable; }
+  .gbw-detail-title { display: flex; align-items: center; gap: 14px; }
+  .gbw-detail-title h3 { color: var(--gbw-muted); }
+  .gbw-detail-message { min-width: 0; margin: 5px 0 7px; display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 7px; }
+  .gbw-detail-message > span { color: var(--gbw-faint); font-size: 10px; }
+  .gbw-detail-subject { min-width: 0; margin: 0; color: var(--gbw-text); font-size: 12px; font-weight: 650; line-height: 1.45; overflow-wrap: anywhere; white-space: pre-wrap; }
+  .gbw-detail-meta { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 18px; color: var(--gbw-muted); font-size: 9px; }
+  .gbw-detail-meta div { min-width: 0; display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 7px; }
+  .gbw-detail-meta dt { color: var(--gbw-faint); }
+  .gbw-detail-meta dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+  .gbw-detail-meta code { color: var(--gbw-muted); font: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+  .gbw-notice { position: fixed; z-index: 40; right: 16px; bottom: 16px; max-width: min(480px, calc(100vw - 32px)); padding: 10px 12px; border: 1px solid var(--gbw-border-strong); border-radius: 8px; color: var(--gbw-text); background: var(--gbw-surface-raised); box-shadow: 0 12px 35px rgb(0 0 0 / .18); font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
+  .gbw-notice.is-success { border-color: color-mix(in srgb, var(--gbw-green) 48%, var(--gbw-border)); }
+  .gbw-notice.is-error { border-color: color-mix(in srgb, var(--gbw-red) 58%, var(--gbw-border)); color: var(--gbw-red); }
+
+  .gbw-form-dialog,
+  .gbw-confirm { color-scheme: inherit; padding: 0; border: 1px solid var(--gbw-border-strong); border-radius: var(--gbw-radius); color: var(--gbw-text); background: var(--gbw-surface-raised); box-shadow: 0 18px 52px rgb(0 0 0 / .28); overscroll-behavior: contain; }
+  .gbw-form-dialog { width: min(480px, calc(100vw - 28px)); max-height: min(680px, calc(100dvh - 28px)); }
+  .gbw-form-dialog::backdrop,
+  .gbw-confirm::backdrop { background: rgb(5 9 15 / .56); }
+  .gbw-form-dialog form { padding: 16px; }
+  .gbw-form-dialog-header h2 { font-size: 14px; }
+  .gbw-form-dialog-header p { margin: 5px 0 0; color: var(--gbw-muted); font-size: 10px; line-height: 1.45; }
+  .gbw-form-fields { margin-top: 14px; display: grid; grid-template-columns: 112px minmax(0, 1fr); align-items: center; gap: 9px 10px; }
+  .gbw-form-fields label { color: var(--gbw-muted); font-size: 10px; }
+  #git-branch-workbench .gbw-form-fields :is(input, select, textarea) { width: 100%; min-width: 0; border: 1px solid var(--gbw-border-strong); border-radius: var(--gbw-radius-sm); color: var(--gbw-text); background: var(--gbw-surface); font: 11px/1.4 inherit; }
+  #git-branch-workbench .gbw-form-fields :is(input, select) { height: 31px; padding: 0 9px; }
+  #git-branch-workbench .gbw-form-fields textarea { min-height: 76px; padding: 7px 9px; resize: vertical; }
+  #git-branch-workbench .gbw-form-fields :is(input, select, textarea):focus-visible { outline: 2px solid var(--gbw-blue); outline-offset: 1px; }
+  .gbw-form-fields textarea { grid-column: 2; }
+  .gbw-form-actions { margin-top: 15px; display: flex; justify-content: flex-end; gap: 7px; }
+  #git-branch-workbench .gbw-form-actions button,
+  #git-branch-workbench .gbw-confirm-actions button { min-width: 66px; height: 31px; padding: 0 11px; border: 1px solid var(--gbw-border-strong); border-radius: var(--gbw-radius-sm); color: var(--gbw-text); background: var(--gbw-surface); cursor: pointer; font: 620 10px/1 inherit; }
+  #git-branch-workbench .gbw-form-actions button:hover,
+  #git-branch-workbench .gbw-confirm-actions button:hover { border-color: var(--gbw-blue); background: var(--gbw-surface-hover); }
+  #git-branch-workbench .gbw-form-actions .gbw-primary-button,
+  #git-branch-workbench .gbw-confirm-actions .gbw-confirm-submit { color: var(--color-text-inverse, #fff); border-color: var(--gbw-blue); background: var(--gbw-blue); }
+
+  .gbw-confirm { width: min(400px, calc(100vw - 28px)); }
+  .gbw-confirm form { padding: 17px; display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 0 11px; }
+  .gbw-confirm-icon { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 9px; color: var(--gbw-amber); background: var(--gbw-amber-soft); }
+  .gbw-confirm-icon svg { width: 19px; height: 19px; }
+  .gbw-confirm-copy h2 { font-size: 15px; }
+  .gbw-confirm-copy p { margin: 7px 0 0; color: var(--gbw-muted); font-size: 11px; line-height: 1.55; white-space: pre-line; }
+  .gbw-confirm-actions { grid-column: 1 / -1; margin-top: 15px; display: flex; justify-content: flex-end; gap: 7px; }
+
+  @media (max-width: 820px) {
+    .gbw-card-summary { display: none; }
+    .gbw-toolbar { align-items: flex-start; }
+    .gbw-title-line { flex-wrap: wrap; }
+    .gbw-path { max-width: 48vw; }
+    .gbw-main { grid-template-columns: 220px minmax(520px, 1fr); overflow-x: auto; overflow-y: hidden; }
+    .gbw-author-column { display: none; }
+    .gbw-commit-table td:last-child { display: none; }
+    .gbw-detail-meta { grid-template-columns: minmax(0, 1fr); }
+    .gbw-form-fields { grid-template-columns: minmax(0, 1fr); gap: 5px; }
+    .gbw-form-fields label:not(:first-child) { margin-top: 5px; }
+    .gbw-form-fields textarea { grid-column: 1; }
+  }
+
+  @media (max-width: 520px) {
+    #git-branch-workbench[data-display-mode="inline"] .gbw-inline-card { grid-template-columns: 32px minmax(0, 1fr); }
+    #git-branch-workbench .gbw-card-open { grid-column: 1 / -1; width: 100%; justify-content: center; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .gbw-skip,
+    #git-branch-workbench button { transition-duration: 0ms !important; }
+  }
+</style>
+
+<script>
+(() => {
+  const root = document.getElementById("git-branch-workbench");
+  const $ = (selector) => root.querySelector(selector);
+  const savedWidgetState = window.openai?.widgetState?.privateContent || window.openai?.widgetState || {};
+  const state = {
+    snapshot: null,
+    selectedHash: typeof savedWidgetState.selectedHash === "string" ? savedWidgetState.selectedHash : null,
+    expandedGroups: {
+      local: savedWidgetState.expandedGroups?.local !== false,
+      remote: savedWidgetState.expandedGroups?.remote === true,
+      tags: savedWidgetState.expandedGroups?.tags === true,
+      worktrees: savedWidgetState.expandedGroups?.worktrees === true
+    },
+    pending: new Map(),
+    nextId: 1,
+    busy: false,
+    noticeTimer: null,
+    confirmResolve: null,
+    graphFrame: null,
+    intrinsicHeightFrame: null,
+    lastIntrinsicHeight: null
+  };
+  const graphColorFallbacks = [
+    "#5b8def", "#4cb7a5", "#d89b3c", "#d96c85", "#8b73d6",
+    "#58b8c0", "#c97db0", "#98b857", "#d7845c", "#70a9e0"
+  ];
+
+  function getGraphColors() {
+    const styles = getComputedStyle(root);
+    return [1, 2, 3, 4, 5].map((index) => styles.getPropertyValue(`--gbw-series-${index}`).trim())
+      .filter(Boolean)
+      .concat(graphColorFallbacks);
+  }
+
+  function applyHostContext(context = {}) {
+    const hostContext = context?.hostContext || context || {};
+    const variables = hostContext.styles?.variables;
+    if (variables && typeof variables === "object") {
+      for (const [name, value] of Object.entries(variables)) {
+        if (name.startsWith("--") && typeof value === "string" && value.trim()) {
+          document.documentElement.style.setProperty(name, value);
+        }
+      }
+    }
+    const theme = hostContext.theme || window.openai?.theme;
+    if (theme === "light" || theme === "dark") {
+      document.documentElement.dataset.theme = theme;
+      document.documentElement.style.colorScheme = theme;
+    }
+    const themeColor = document.querySelector('meta[name="theme-color"]');
+    if (themeColor) themeColor.content = getComputedStyle(root).getPropertyValue("--gbw-bg").trim() || "#181818";
+    scheduleGraphDraw();
+  }
+
+  function persistWidgetState() {
+    if (!window.openai?.setWidgetState) return;
+    window.openai.setWidgetState({
+      modelContent: state.snapshot ? {
+        selectedRef: state.snapshot.selectedRef,
+        selectedRefType: state.snapshot.selectedRefType,
+        currentBranch: state.snapshot.currentBranch
+      } : null,
+      privateContent: {
+        selectedHash: state.selectedHash,
+        expandedGroups: state.expandedGroups
+      }
+    });
+  }
+
+  function applyDisplayMode(mode) {
+    const normalized = mode === "fullscreen" || mode === "pip" ? mode : "inline";
+    root.dataset.displayMode = normalized;
+    if (normalized === "inline") {
+      scheduleIntrinsicHeightReport();
+    } else {
+      if (state.intrinsicHeightFrame !== null) cancelAnimationFrame(state.intrinsicHeightFrame);
+      state.intrinsicHeightFrame = null;
+      scheduleGraphDraw();
+    }
+  }
+
+  function scheduleIntrinsicHeightReport() {
+    if (root.dataset.displayMode !== "inline" || !window.openai?.notifyIntrinsicHeight) return;
+    if (state.intrinsicHeightFrame !== null) cancelAnimationFrame(state.intrinsicHeightFrame);
+    state.intrinsicHeightFrame = requestAnimationFrame(() => {
+      state.intrinsicHeightFrame = null;
+      if (root.dataset.displayMode !== "inline") return;
+      const height = Math.ceil($(".gbw-inline-card").getBoundingClientRect().height);
+      if (!Number.isFinite(height) || height <= 0 || height === state.lastIntrinsicHeight) return;
+      state.lastIntrinsicHeight = height;
+      window.openai.notifyIntrinsicHeight(height);
+    });
+  }
+
+  function rpc(method, params) {
+    const id = state.nextId++;
+    window.parent.postMessage({ jsonrpc: "2.0", id, method, params }, "*");
+    return new Promise((resolve, reject) => state.pending.set(id, { resolve, reject }));
+  }
+
+  async function callTool(name, args) {
+    if (window.openai?.callTool) return window.openai.callTool(name, args);
+    return rpc("tools/call", { name, arguments: args });
+  }
+
+  function getSnapshot(result) {
+    if (result?.isError) throw new Error(result.content?.[0]?.text || "Git 操作失败，请检查仓库状态后重试。");
+    return result?.structuredContent || result?.result?.structuredContent || null;
+  }
+
+  function setText(selector, value) {
+    $(selector).textContent = value;
+  }
+
+  function formatNumber(value) {
+    return new Intl.NumberFormat(navigator.languages?.[0] || "zh-CN").format(Number(value || 0));
+  }
+
+  function formatDate(value) {
+    if (!value) return "—";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return new Intl.DateTimeFormat(navigator.languages?.[0] || "zh-CN", {
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit"
+    }).format(date);
+  }
+
+  function icon(path) {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("aria-hidden", "true");
+    const shape = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    shape.setAttribute("d", path);
+    svg.appendChild(shape);
+    return svg;
+  }
+
+  function showNotice(message, tone = "success") {
+    const notice = $("#gbw-notice");
+    window.clearTimeout(state.noticeTimer);
+    notice.textContent = String(message || "操作完成");
+    notice.className = `gbw-notice is-${tone}`;
+    notice.hidden = false;
+    state.noticeTimer = window.setTimeout(() => { notice.hidden = true; }, tone === "error" ? 8000 : 5000);
+  }
+
+  function confirmAction({ title, message, confirmLabel }) {
+    const dialog = $("#gbw-confirm");
+    setText("#gbw-confirm-title", title);
+    setText("#gbw-confirm-message", message);
+    setText("#gbw-confirm-submit", confirmLabel);
+    if (typeof dialog.showModal !== "function") return Promise.resolve(window.confirm(`${title}\n\n${message}`));
+    if (dialog.open) dialog.close("cancel");
+    dialog.showModal();
+    return new Promise((resolve) => { state.confirmResolve = resolve; });
+  }
+
+  function setBusy(busy) {
+    state.busy = busy;
+    root.setAttribute("aria-busy", String(busy));
+    for (const button of root.querySelectorAll("button")) {
+      if (!button.closest("dialog")) button.disabled = busy || button.dataset.disabled === "true";
+    }
+  }
+
+  async function runTool(name, args, pendingMessage) {
+    if (state.busy) return;
+    setBusy(true);
+    showNotice(pendingMessage, "success");
+    try {
+      const result = await callTool(name, args);
+      const snapshot = getSnapshot(result);
+      if (!snapshot) throw new Error("操作已返回，但没有仓库快照。请刷新后重试。");
+      render(snapshot);
+      showNotice(snapshot.operation?.message || "操作完成", "success");
+    } catch (error) {
+      showNotice(error?.message || String(error), "error");
+    } finally {
+      setBusy(false);
+      updateActionState();
+    }
+  }
+
+  // Direct port of OpenGit ProjectCommitHistory.vue GitGraph column allocation.
+  function assignGraphLayout(commits) {
+    const branches = [];
+    let maxColumn = 0;
+
+    const getFreeColumn = () => {
+      for (let index = 0; index < branches.length; index += 1) {
+        if (branches[index] === undefined) return index;
+      }
+      return branches.length;
+    };
+
+    const updateBranch = (hash, column) => { branches[column] = hash; };
+
+    for (const [row, commit] of commits.entries()) {
+      let column = branches.indexOf(commit.hash);
+      if (column < 0) column = getFreeColumn();
+
+      while (branches.indexOf(commit.hash) > -1) {
+        branches[branches.indexOf(commit.hash)] = undefined;
+      }
+
+      for (let index = 0; index < commit.parents.length; index += 1) {
+        const parentHash = commit.parents[index];
+        const existingColumn = branches.indexOf(parentHash);
+        if (existingColumn > -1) {
+          if (branches[column] === undefined) updateBranch(parentHash, column);
+        } else if (commit.parents.length === 1 || index === 0) {
+          updateBranch(parentHash, column);
+        } else {
+          updateBranch(parentHash, getFreeColumn());
+        }
+      }
+
+      commit.__column = column;
+      commit.__row = row;
+      maxColumn = Math.max(maxColumn, column);
+    }
+
+    return maxColumn;
+  }
+
+  function distanceBetweenPoints(left, right) {
+    return Math.hypot(right.x - left.x, right.y - left.y);
+  }
+
+  function moveTowardPoint(from, to, distance) {
+    const length = distanceBetweenPoints(from, to);
+    if (!length || distance <= 0) return { ...from };
+    const ratio = Math.min(1, distance / length);
+    return {
+      x: from.x + ((to.x - from.x) * ratio),
+      y: from.y + ((to.y - from.y) * ratio)
+    };
+  }
+
+  function buildOrthogonalRoundedPath(points, radius = 5) {
+    if (!points.length) return "";
+    if (points.length === 1) return `M${points[0].x},${points[0].y}`;
+    if (points.length === 2) return `M${points[0].x},${points[0].y} L${points[1].x},${points[1].y}`;
+    const commands = [`M${points[0].x},${points[0].y}`];
+    for (let index = 1; index < points.length - 1; index += 1) {
+      const previous = points[index - 1];
+      const current = points[index];
+      const next = points[index + 1];
+      const cornerRadius = Math.min(
+        radius,
+        distanceBetweenPoints(previous, current) / 2,
+        distanceBetweenPoints(current, next) / 2
+      );
+      if (!cornerRadius) {
+        commands.push(`L${current.x},${current.y}`);
+        continue;
+      }
+      const start = moveTowardPoint(current, previous, cornerRadius);
+      const end = moveTowardPoint(current, next, cornerRadius);
+      commands.push(`L${start.x},${start.y}`);
+      commands.push(`Q${current.x},${current.y} ${end.x},${end.y}`);
+    }
+    const last = points[points.length - 1];
+    commands.push(`L${last.x},${last.y}`);
+    return commands.join(" ");
+  }
+
+  function buildGraphLines(commits) {
+    const colors = getGraphColors();
+    const lineColors = [];
+    const lines = [];
+    const commitMap = new Map(commits.map((commit) => [commit.hash, commit]));
+
+    for (const commit of commits) {
+      let color = lineColors[commit.__column];
+      if (!color) {
+        color = colors.shift();
+        colors.push(color);
+        lineColors[commit.__column] = color;
+      }
+      commit.__color = color;
+
+      for (const parentHash of commit.parents) {
+        const parent = commitMap.get(parentHash);
+        if (!parent) continue;
+        const start = { x: commit.__column, y: commit.__row };
+        const end = { x: parent.__column, y: parent.__row };
+        let middle = null;
+
+        if (start.x < end.x) {
+          middle = { x: end.x, y: start.y + 0.4 };
+          if (!lineColors[end.x]) {
+            const nextColor = colors.shift();
+            colors.push(nextColor);
+            lineColors[end.x] = nextColor;
+          }
+          start.color = lineColors[end.x];
+        } else if (start.x > end.x) {
+          middle = { x: start.x, y: end.y - 0.4 };
+          lineColors[start.x] = undefined;
+          start.color = commit.__color;
+        } else {
+          start.color = commit.__color;
+        }
+
+        lines.push(middle ? [start, middle, end] : [start, end]);
+      }
+    }
+    return lines;
+  }
+
+  function graphColumnWidth(commits) {
+    const branchSpacing = 16;
+    const leftMargin = 12;
+    const maxColumn = commits.reduce((max, commit) => Math.max(max, commit.__column || 0), 0);
+    return Math.max(72, Math.ceil((maxColumn + 1) * branchSpacing + leftMargin * 2 + 5));
+  }
+
+  function graphY(position, rowCenters) {
+    if (!rowCenters.length) return 0;
+    if (position <= 0) return rowCenters[0];
+    if (position >= rowCenters.length - 1) return rowCenters[rowCenters.length - 1];
+    const start = Math.floor(position);
+    const end = Math.ceil(position);
+    const progress = position - start;
+    return rowCenters[start] + ((rowCenters[end] - rowCenters[start]) * progress);
+  }
+
+  function drawGraph(commits) {
+    const svg = $("#gbw-graph");
+    const body = $("#gbw-commits");
+    const wrap = $(".gbw-table-wrap");
+    const rows = [...body.querySelectorAll("tr")];
+    if (!rows.length || rows.length !== commits.length) {
+      svg.replaceChildren();
+      return;
+    }
+
+    const bodyRect = body.getBoundingClientRect();
+    const wrapRect = wrap.getBoundingClientRect();
+    const rowCenters = rows.map((row) => {
+      const rect = row.getBoundingClientRect();
+      return rect.top - bodyRect.top + (rect.height / 2);
+    });
+    const branchSpacing = 16;
+    const leftMargin = 12;
+    const colors = getGraphColors();
+    const graphWidth = graphColumnWidth(commits);
+    const height = Math.max(1, bodyRect.height);
+    const top = bodyRect.top - wrapRect.top;
+
+    svg.replaceChildren();
+    svg.style.top = `${top}px`;
+    svg.setAttribute("width", String(graphWidth));
+    svg.setAttribute("height", String(height));
+    svg.setAttribute("viewBox", `0 0 ${graphWidth} ${height}`);
+
+    const lineGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    lineGroup.setAttribute("fill", "none");
+    lineGroup.setAttribute("stroke-width", "1.5");
+    const circleGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    svg.append(lineGroup, circleGroup);
+
+    for (const line of buildGraphLines(commits)) {
+      const points = line.map((point) => ({
+        x: leftMargin + point.x * branchSpacing,
+        y: graphY(point.y, rowCenters)
+      }));
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.setAttribute("d", buildOrthogonalRoundedPath(points));
+      path.setAttribute("stroke", line[0].color || colors[0]);
+      path.setAttribute("stroke-linecap", "round");
+      path.setAttribute("stroke-linejoin", "round");
+      path.setAttribute("opacity", ".95");
+      lineGroup.appendChild(path);
+    }
+
+    for (const commit of commits) {
+      const node = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      node.classList.add("gbw-graph-node");
+      node.classList.toggle("is-selected", state.selectedHash === commit.hash);
+      node.dataset.hash = commit.hash;
+      const x = leftMargin + commit.__column * branchSpacing;
+      const y = rowCenters[commit.__row];
+      const ring = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      ring.classList.add("gbw-graph-ring");
+      ring.setAttribute("cx", String(x));
+      ring.setAttribute("cy", String(y));
+      ring.setAttribute("r", "6.5");
+      ring.setAttribute("fill", "none");
+      ring.setAttribute("stroke", commit.__color || colors[0]);
+      ring.setAttribute("stroke-width", "1.5");
+      const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      circle.setAttribute("cx", String(x));
+      circle.setAttribute("cy", String(y));
+      circle.setAttribute("r", "3.5");
+      circle.setAttribute("fill", commit.__color || colors[0]);
+      node.append(ring, circle);
+      circleGroup.appendChild(node);
+    }
+  }
+
+  function scheduleGraphDraw() {
+    if (state.graphFrame !== null) cancelAnimationFrame(state.graphFrame);
+    state.graphFrame = requestAnimationFrame(() => {
+      state.graphFrame = null;
+      if (state.snapshot?.commits) drawGraph(state.snapshot.commits);
+    });
+  }
+
+  function selectCommit(commit) {
+    state.selectedHash = commit.hash;
+    for (const row of root.querySelectorAll("#gbw-commits tr")) {
+      row.classList.toggle("is-selected", row.dataset.hash === commit.hash);
+    }
+    for (const node of root.querySelectorAll(".gbw-graph-node")) {
+      node.classList.toggle("is-selected", node.dataset.hash === commit.hash);
+    }
+    setText("#gbw-detail-subject", commit.subject || "(无提交说明)");
+    const meta = $("#gbw-detail-meta");
+    meta.replaceChildren();
+    const rows = [
+      ["完整哈希", commit.hash || "—", true],
+      ["作者", commit.author || "—"],
+      ["邮箱", commit.email || "—"],
+      ["时间", formatDate(commit.date)],
+      ["父提交", commit.parents?.join(", ") || "无", true],
+      ["引用", commit.refs?.join(", ") || "无", true]
+    ];
+    for (const [label, value, codeValue] of rows) {
+      const wrap = document.createElement("div");
+      const dt = document.createElement("dt");
+      const dd = document.createElement("dd");
+      dt.textContent = label;
+      if (codeValue) {
+        const code = document.createElement("code");
+        code.textContent = value;
+        code.setAttribute("translate", "no");
+        dd.appendChild(code);
+      } else {
+        dd.textContent = value;
+      }
+      wrap.append(dt, dd);
+      meta.appendChild(wrap);
+    }
+    persistWidgetState();
+  }
+
+  function makeSyncBadge(branch) {
+    const sync = document.createElement("span");
+    sync.className = "gbw-branch-sync";
+    if (branch.ahead > 0) {
+      const up = document.createElement("span");
+      up.className = "up";
+      up.textContent = `↑${formatNumber(branch.ahead)}`;
+      sync.appendChild(up);
+    }
+    if (branch.behind > 0) {
+      const down = document.createElement("span");
+      down.className = "down";
+      down.textContent = `↓${formatNumber(branch.behind)}`;
+      sync.appendChild(down);
+    }
+    return sync;
+  }
+
+  function renderBranchList(branches, type) {
+    const target = type === "remote" ? $("#gbw-remote-list") : $("#gbw-local-list");
+    target.replaceChildren();
+    if (!branches.length) {
+      const empty = document.createElement("div");
+      empty.className = "gbw-list-empty";
+      empty.textContent = type === "remote" ? "暂无远端分支" : "暂无本地分支";
+      target.appendChild(empty);
+      return;
+    }
+
+    for (const branch of branches) {
+      const current = type === "local" && branch.name === state.snapshot.currentBranch;
+      const trackingCurrent = type === "remote" && branch.trackingLocal === state.snapshot.currentBranch;
+      const selected = branch.name === state.snapshot.selectedRef && type === state.snapshot.selectedRefType;
+      const row = document.createElement("div");
+      row.className = "gbw-branch-row";
+      row.classList.toggle("is-current", current || trackingCurrent);
+      row.classList.toggle("is-selected", selected);
+
+      const main = document.createElement("button");
+      main.type = "button";
+      main.className = "gbw-branch-main";
+      main.setAttribute("aria-pressed", String(selected));
+      main.title = `查看${type === "remote" ? "远端" : "本地"}分支 ${branch.name} 的提交记录`;
+      const dot = document.createElement("span");
+      dot.className = "gbw-branch-dot";
+      dot.setAttribute("aria-hidden", "true");
+      const name = document.createElement("span");
+      name.className = "gbw-branch-name";
+      name.textContent = branch.name;
+      name.setAttribute("translate", "no");
+      main.append(dot, name);
+      if (type === "local" && (branch.ahead > 0 || branch.behind > 0)) main.appendChild(makeSyncBadge(branch));
+      main.addEventListener("click", () => {
+        if (state.busy || selected) return;
+        void runTool("get_git_snapshot", {
+          repoPath: state.snapshot.repoRoot,
+          ref: branch.name,
+          refType: type,
+          limit: state.snapshot.limit
+        }, `正在读取 ${branch.name}…`);
+      });
+      row.appendChild(main);
+
+      if (current || trackingCurrent) {
+        const mark = document.createElement("span");
+        mark.className = "gbw-current-mark";
+        mark.textContent = "✓";
+        mark.title = current ? "当前工作区分支" : `当前本地分支 ${branch.trackingLocal} 跟踪此远端分支`;
+        row.appendChild(mark);
+      } else {
+        const switchButton = document.createElement("button");
+        switchButton.type = "button";
+        switchButton.className = "gbw-branch-switch";
+        switchButton.setAttribute("aria-label", `切换到${type === "remote" ? "远端" : "本地"}分支 ${branch.name}`);
+        switchButton.title = type === "remote" ? "创建或切换到同名本地跟踪分支" : "切换到此分支";
+        switchButton.appendChild(icon("M5 12h13M13 7l5 5-5 5"));
+        switchButton.addEventListener("click", async () => {
+          if (state.busy) return;
+          const approved = await confirmAction({
+            title: "切换分支",
+            message: type === "remote"
+              ? `将远端分支“${branch.name}”检出到本地。\n若同名本地分支不存在，将创建跟踪分支；工作区有未提交改动时会阻止操作。`
+              : `将工作区切换到本地分支“${branch.name}”。\n工作区有未提交改动时，操作会被阻止。`,
+            confirmLabel: "确认切换"
+          });
+          if (!approved) return;
+          void runTool("switch_git_branch", {
+            repoPath: state.snapshot.repoRoot,
+            branch: branch.name,
+            branchType: type,
+            limit: state.snapshot.limit
+          }, `正在切换到 ${branch.name}…`);
+        });
+        row.appendChild(switchButton);
+      }
+      target.appendChild(row);
+    }
+  }
+
+  function renderTagList(tags) {
+    const target = $("#gbw-tag-list");
+    target.replaceChildren();
+    if (!tags.length) {
+      const empty = document.createElement("div");
+      empty.className = "gbw-list-empty";
+      empty.textContent = "暂无标签";
+      target.appendChild(empty);
+      return;
+    }
+    for (const tag of tags) {
+      const selected = tag.name === state.snapshot.selectedRef && state.snapshot.selectedRefType === "tag";
+      const row = document.createElement("div");
+      row.className = "gbw-branch-row";
+      row.classList.toggle("is-selected", selected);
+      const main = document.createElement("button");
+      main.type = "button";
+      main.className = "gbw-branch-main";
+      main.setAttribute("aria-pressed", String(selected));
+      main.title = `查看标签 ${tag.name} 的提交记录`;
+      const dot = document.createElement("span");
+      dot.className = "gbw-branch-dot";
+      dot.setAttribute("aria-hidden", "true");
+      const name = document.createElement("span");
+      name.className = "gbw-branch-name";
+      name.textContent = tag.name;
+      name.setAttribute("translate", "no");
+      main.append(dot, name);
+      if (tag.annotated) {
+        const meta = document.createElement("span");
+        meta.className = "gbw-ref-meta";
+        meta.textContent = "注解";
+        main.appendChild(meta);
+      }
+      main.addEventListener("click", () => {
+        if (state.busy || selected) return;
+        void runTool("get_git_snapshot", {
+          repoPath: state.snapshot.repoRoot,
+          ref: tag.name,
+          refType: "tag",
+          limit: state.snapshot.limit
+        }, `正在读取标签 ${tag.name}…`);
+      });
+      row.appendChild(main);
+      target.appendChild(row);
+    }
+  }
+
+  function renderWorktreeList(worktrees, localBranches) {
+    const target = $("#gbw-worktree-list");
+    target.replaceChildren();
+    if (!worktrees.length) {
+      const empty = document.createElement("div");
+      empty.className = "gbw-list-empty";
+      empty.textContent = "暂无 Worktree";
+      target.appendChild(empty);
+      return;
+    }
+    const localNames = new Set(localBranches.map((branch) => branch.name));
+    for (const worktree of worktrees) {
+      const hasBranch = Boolean(worktree.branch && localNames.has(worktree.branch));
+      const selected = hasBranch && worktree.branch === state.snapshot.selectedRef && state.snapshot.selectedRefType === "local";
+      const row = document.createElement("div");
+      row.className = "gbw-branch-row";
+      row.classList.toggle("is-current", Boolean(worktree.current));
+      row.classList.toggle("is-selected", selected);
+      const main = document.createElement("button");
+      main.type = "button";
+      main.className = "gbw-branch-main gbw-worktree-main";
+      main.disabled = !hasBranch;
+      main.dataset.disabled = String(!hasBranch);
+      main.setAttribute("aria-pressed", String(selected));
+      main.title = hasBranch ? `查看 Worktree 分支 ${worktree.branch} 的提交记录` : "detached Worktree 暂不支持按引用读取历史";
+      const dot = document.createElement("span");
+      dot.className = "gbw-branch-dot";
+      dot.setAttribute("aria-hidden", "true");
+      const copy = document.createElement("span");
+      copy.className = "gbw-worktree-copy";
+      const name = document.createElement("span");
+      name.className = "gbw-branch-name";
+      name.textContent = worktree.branch || `detached @ ${(worktree.head || "").slice(0, 8) || "HEAD"}`;
+      name.setAttribute("translate", "no");
+      const path = document.createElement("span");
+      path.className = "gbw-worktree-path";
+      path.textContent = worktree.path || "—";
+      path.setAttribute("translate", "no");
+      copy.append(name, path);
+      main.append(dot, copy);
+      main.addEventListener("click", () => {
+        if (state.busy || selected || !hasBranch) return;
+        void runTool("get_git_snapshot", {
+          repoPath: state.snapshot.repoRoot,
+          ref: worktree.branch,
+          refType: "local",
+          limit: state.snapshot.limit
+        }, `正在读取 Worktree 分支 ${worktree.branch}…`);
+      });
+      row.appendChild(main);
+      const meta = document.createElement("span");
+      meta.className = worktree.current ? "gbw-current-mark" : "gbw-ref-meta";
+      meta.textContent = worktree.current ? "✓" : worktree.locked ? "锁定" : worktree.prunable ? "可清理" : "";
+      meta.title = worktree.current ? "当前 Worktree" : worktree.locked ? "Worktree 已锁定" : worktree.prunable ? "Worktree 可清理" : "";
+      if (meta.textContent) row.appendChild(meta);
+      target.appendChild(row);
+    }
+  }
+
+  function applyGroupState(group) {
+    const button = root.querySelector(`[data-group-toggle="${group}"]`);
+    const target = $(`#gbw-${group === "tags" ? "tag" : group === "worktrees" ? "worktree" : group}-list`);
+    const expanded = state.expandedGroups[group] === true;
+    button.setAttribute("aria-expanded", String(expanded));
+    target.hidden = !expanded;
+  }
+
+  function appendRefOptions(select, label, refs, type, nameForRef = (ref) => ref.name) {
+    if (!refs.length) return;
+    const group = document.createElement("optgroup");
+    group.label = label;
+    for (const ref of refs) {
+      const option = document.createElement("option");
+      option.value = `${type}:${ref.name}`;
+      option.textContent = nameForRef(ref);
+      option.dataset.ref = ref.name;
+      option.dataset.type = type;
+      group.appendChild(option);
+    }
+    select.appendChild(group);
+  }
+
+  function openCreateBranchDialog() {
+    if (!state.snapshot || $("#gbw-new-branch").disabled) return;
+    const dialog = $("#gbw-create-branch");
+    const base = $("#gbw-branch-base");
+    const local = state.snapshot.localBranches || [];
+    const remote = state.snapshot.remoteBranches || [];
+    const tags = state.snapshot.tags || [];
+    base.replaceChildren();
+    appendRefOptions(base, "本地分支", local, "local");
+    appendRefOptions(base, "远端分支", remote, "remote");
+    appendRefOptions(base, "标签", tags, "tag");
+    const preferred = [...base.options].find((option) =>
+      option.dataset.ref === state.snapshot.selectedRef && option.dataset.type === state.snapshot.selectedRefType
+    ) || [...base.options].find((option) => option.dataset.ref === state.snapshot.currentBranch && option.dataset.type === "local");
+    if (preferred) base.value = preferred.value;
+    $("#gbw-branch-name").value = "";
+    if (typeof dialog.showModal !== "function") {
+      showNotice("当前宿主不支持分支创建对话框。", "error");
+      return;
+    }
+    dialog.showModal();
+    $("#gbw-branch-name").focus();
+  }
+
+  function openCreateMergeRequestDialog() {
+    if (!state.snapshot || $("#gbw-new-mr").disabled) return;
+    const dialog = $("#gbw-create-mr");
+    const source = $("#gbw-mr-source");
+    const target = $("#gbw-mr-target");
+    const eligibleSources = (state.snapshot.localBranches || []).filter((branch) => branch.upstream && branch.ahead === 0);
+    source.replaceChildren();
+    target.replaceChildren();
+    for (const branch of eligibleSources) {
+      const option = document.createElement("option");
+      option.value = branch.name;
+      option.textContent = branch.name;
+      option.setAttribute("translate", "no");
+      source.appendChild(option);
+    }
+    for (const branchName of state.snapshot.mergeTargets || []) {
+      const option = document.createElement("option");
+      option.value = branchName;
+      option.textContent = branchName;
+      option.setAttribute("translate", "no");
+      target.appendChild(option);
+    }
+    if (eligibleSources.some((branch) => branch.name === state.snapshot.currentBranch)) {
+      source.value = state.snapshot.currentBranch;
+    }
+    if ((state.snapshot.mergeTargets || []).includes(state.snapshot.suggestedBaseBranch)) {
+      target.value = state.snapshot.suggestedBaseBranch;
+    }
+    const provider = state.snapshot.hosting?.provider === "github" ? "GitHub Pull Request" : "GitLab Merge Request";
+    setText("#gbw-mr-provider", `使用本机已登录的 ${state.snapshot.hosting?.cli || "gh/glab"} 创建 ${provider}；不会自动推送分支。`);
+    $("#gbw-mr-title-input").value = "";
+    $("#gbw-mr-description").value = "";
+    if (typeof dialog.showModal !== "function") {
+      showNotice("当前宿主不支持 MR/PR 创建对话框。", "error");
+      return;
+    }
+    dialog.showModal();
+    $("#gbw-mr-title-input").focus();
+  }
+
+  function renderCommits(commits) {
+    const body = $("#gbw-commits");
+    body.replaceChildren();
+    $("#gbw-empty").hidden = commits.length > 0;
+    $("#gbw-table-shell").hidden = commits.length === 0;
+    if (!commits.length) {
+      setText("#gbw-empty", "这个分支还没有可显示的提交。");
+      return;
+    }
+
+    assignGraphLayout(commits);
+    root.style.setProperty("--gbw-graph-width", `${graphColumnWidth(commits)}px`);
+    for (const commit of commits) {
+      const row = document.createElement("tr");
+      row.dataset.hash = commit.hash;
+      const graph = document.createElement("td");
+      graph.className = "gbw-graph-cell";
+      graph.setAttribute("aria-hidden", "true");
+
+      const messageCell = document.createElement("td");
+      messageCell.className = "gbw-commit-cell";
+      const select = document.createElement("button");
+      select.type = "button";
+      select.className = "gbw-commit-select";
+      select.setAttribute("aria-label", `查看提交 ${commit.shortHash}: ${commit.subject || "无提交说明"}`);
+      const subject = document.createElement("span");
+      subject.className = "gbw-commit-subject";
+      subject.textContent = commit.subject || "(无提交说明)";
+      subject.title = commit.subject || "(无提交说明)";
+      select.appendChild(subject);
+      if (commit.refs?.length) {
+        const refs = document.createElement("span");
+        refs.className = "gbw-refs";
+        for (const ref of commit.refs.slice(0, 3)) {
+          const badge = document.createElement("span");
+          badge.className = "gbw-ref";
+          badge.textContent = ref;
+          badge.title = ref;
+          badge.setAttribute("translate", "no");
+          refs.appendChild(badge);
+        }
+        select.appendChild(refs);
+      }
+      select.addEventListener("click", () => selectCommit(commit));
+      messageCell.appendChild(select);
+
+      const hashCell = document.createElement("td");
+      const hash = document.createElement("code");
+      hash.className = "gbw-code";
+      hash.textContent = commit.shortHash;
+      hash.setAttribute("translate", "no");
+      hashCell.appendChild(hash);
+
+      const dateCell = document.createElement("td");
+      const date = document.createElement("span");
+      date.className = "gbw-date";
+      date.textContent = formatDate(commit.date);
+      dateCell.appendChild(date);
+
+      const authorCell = document.createElement("td");
+      const author = document.createElement("span");
+      author.className = "gbw-author";
+      author.textContent = commit.author || "—";
+      author.title = commit.author || "—";
+      authorCell.appendChild(author);
+
+      row.append(graph, messageCell, hashCell, dateCell, authorCell);
+      body.appendChild(row);
+    }
+
+    const selected = commits.find((commit) => commit.hash === state.selectedHash) || commits[0];
+    selectCommit(selected);
+    scheduleGraphDraw();
+  }
+
+  function updateActionState() {
+    if (!state.snapshot) return;
+    const snapshot = state.snapshot;
+    const detached = snapshot.currentBranch === "HEAD detached";
+    const pullDisabled = state.busy || detached || !snapshot.upstream || !snapshot.clean;
+    const pushDisabled = state.busy || detached || !snapshot.upstream;
+    const pull = $("#gbw-pull");
+    const push = $("#gbw-push");
+    pull.dataset.disabled = String(pullDisabled);
+    push.dataset.disabled = String(pushDisabled);
+    pull.disabled = pullDisabled;
+    push.disabled = pushDisabled;
+    pull.title = detached
+      ? "detached HEAD 不能拉取"
+      : !snapshot.upstream
+        ? "当前分支没有 upstream"
+        : !snapshot.clean
+          ? "工作区有未提交改动，不能拉取"
+          : `从 ${snapshot.upstream} 快进拉取`;
+    push.title = detached
+      ? "detached HEAD 不能推送"
+      : !snapshot.upstream
+        ? "当前分支没有 upstream"
+        : `推送当前分支到 ${snapshot.upstream}`;
+
+    const pullCount = $("#gbw-pull-count");
+    const pushCount = $("#gbw-push-count");
+    pullCount.hidden = snapshot.behind <= 0;
+    pushCount.hidden = snapshot.ahead <= 0;
+    pullCount.textContent = snapshot.behind > 0 ? `↓${formatNumber(snapshot.behind)}` : "";
+    pushCount.textContent = snapshot.ahead > 0 ? `↑${formatNumber(snapshot.ahead)}` : "";
+
+    const createBranch = $("#gbw-new-branch");
+    const createBranchDisabled = state.busy || !snapshot.clean || ![
+      ...(snapshot.localBranches || []),
+      ...(snapshot.remoteBranches || []),
+      ...(snapshot.tags || [])
+    ].length;
+    createBranch.dataset.disabled = String(createBranchDisabled);
+    createBranch.disabled = createBranchDisabled;
+    createBranch.title = !snapshot.clean
+      ? "工作区有未提交改动，不能创建并切换分支"
+      : "从当前快照中的分支或标签创建本地分支";
+
+    const createMr = $("#gbw-new-mr");
+    const eligibleSources = (snapshot.localBranches || []).filter((branch) => branch.upstream && branch.ahead === 0);
+    const createMrDisabled = state.busy || !snapshot.clean || !snapshot.hosting?.cliAvailable ||
+      !eligibleSources.length || !(snapshot.mergeTargets || []).length;
+    createMr.dataset.disabled = String(createMrDisabled);
+    createMr.disabled = createMrDisabled;
+    createMr.title = !snapshot.clean
+      ? "工作区有未提交改动，不能创建 MR/PR"
+      : !snapshot.hosting?.cliAvailable
+        ? "未检测到可用且已登录的 gh/glab CLI"
+        : !eligibleSources.length
+          ? "没有已设置 upstream 且完整推送的本地源分支"
+          : !(snapshot.mergeTargets || []).length
+            ? "当前远端没有可用目标分支"
+            : `创建 ${snapshot.hosting?.provider === "github" ? "Pull Request" : "Merge Request"}`;
+  }
+
+  function render(snapshot) {
+    if (!snapshot || !Array.isArray(snapshot.commits)) return;
+    state.snapshot = snapshot;
+    setText("#gbw-title", snapshot.repoName || "Git Branch Workbench");
+    setText("#gbw-card-title", snapshot.repoName || "Git Branch Workbench");
+    setText("#gbw-path", snapshot.repoRoot || "—");
+    setText("#gbw-card-path", snapshot.repoRoot || "—");
+    setText("#gbw-current", snapshot.currentBranch || "HEAD detached");
+    setText("#gbw-card-current", snapshot.currentBranch || "HEAD detached");
+    const dirty = $("#gbw-dirty");
+    dirty.textContent = snapshot.clean ? "工作区干净" : `${formatNumber(snapshot.changedFiles)} 个改动`;
+    dirty.classList.toggle("is-dirty", !snapshot.clean);
+    const cardDirty = $("#gbw-card-dirty");
+    cardDirty.textContent = dirty.textContent;
+    cardDirty.classList.toggle("is-dirty", !snapshot.clean);
+    const sync = $("#gbw-sync");
+    sync.hidden = !snapshot.upstream;
+    sync.textContent = snapshot.upstream ? `↑${formatNumber(snapshot.ahead)} ↓${formatNumber(snapshot.behind)}` : "";
+
+    const localBranches = Array.isArray(snapshot.localBranches) ? snapshot.localBranches : [];
+    const remoteBranches = Array.isArray(snapshot.remoteBranches) ? snapshot.remoteBranches : [];
+    const tags = Array.isArray(snapshot.tags) ? snapshot.tags : [];
+    const worktrees = Array.isArray(snapshot.worktrees) ? snapshot.worktrees : [];
+    const totalRefs = localBranches.length + remoteBranches.length + tags.length + worktrees.length;
+    setText("#gbw-card-summary", `${formatNumber(localBranches.length + remoteBranches.length)} 个分支 · ${formatNumber(tags.length)} 个标签 · ${formatNumber(snapshot.commits.length)} 条提交`);
+    setText("#gbw-branch-total", formatNumber(totalRefs));
+    setText("#gbw-local-count", formatNumber(localBranches.length));
+    setText("#gbw-remote-count", formatNumber(remoteBranches.length));
+    setText("#gbw-tag-count", formatNumber(tags.length));
+    setText("#gbw-worktree-count", formatNumber(worktrees.length));
+    setText("#gbw-history-heading", snapshot.selectedRef || snapshot.currentBranch || "HEAD");
+    setText("#gbw-ref-type", snapshot.selectedRefType === "remote" ? "远端" : snapshot.selectedRefType === "tag" ? "标签" : snapshot.selectedRefType === "detached" ? "HEAD" : "本地");
+    setText("#gbw-commit-count", `${formatNumber(snapshot.commits.length)} 条提交`);
+
+    renderBranchList(localBranches, "local");
+    renderBranchList(remoteBranches, "remote");
+    renderTagList(tags);
+    renderWorktreeList(worktrees, localBranches);
+    for (const group of ["local", "remote", "tags", "worktrees"]) applyGroupState(group);
+    renderCommits(snapshot.commits);
+    updateActionState();
+    persistWidgetState();
+    scheduleIntrinsicHeightReport();
+  }
+
+  window.addEventListener("message", (event) => {
+    if (event.source !== window.parent) return;
+    const message = event.data;
+    if (!message || message.jsonrpc !== "2.0") return;
+    if (message.id !== undefined && state.pending.has(message.id)) {
+      const pending = state.pending.get(message.id);
+      state.pending.delete(message.id);
+      if (message.error) pending.reject(message.error);
+      else pending.resolve(message.result);
+      return;
+    }
+    if (message.method === "ui/notifications/tool-result") {
+      render(message.params?.structuredContent || message.params?.result?.structuredContent);
+    }
+    if (message.method === "ui/notifications/host-context-changed") applyHostContext(message.params);
+  }, { passive: true });
+
+  $("#gbw-confirm").addEventListener("close", () => {
+    if (!state.confirmResolve) return;
+    const resolve = state.confirmResolve;
+    state.confirmResolve = null;
+    resolve($("#gbw-confirm").returnValue === "confirm");
+  });
+
+  for (const button of root.querySelectorAll("[data-group-toggle]")) {
+    button.addEventListener("click", () => {
+      const group = button.dataset.groupToggle;
+      state.expandedGroups[group] = !state.expandedGroups[group];
+      applyGroupState(group);
+      persistWidgetState();
+    });
+  }
+
+  $("#gbw-new-branch").addEventListener("click", openCreateBranchDialog);
+  $("#gbw-create-branch-cancel").addEventListener("click", () => $("#gbw-create-branch").close());
+  $("#gbw-create-branch-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!state.snapshot || state.busy) return;
+    const option = $("#gbw-branch-base").selectedOptions[0];
+    const branchName = $("#gbw-branch-name").value.trim();
+    if (!option || !branchName) return;
+    $("#gbw-create-branch").close();
+    const approved = await confirmAction({
+      title: "创建并切换分支",
+      message: `从${option.dataset.type === "tag" ? "标签" : "分支"}“${option.dataset.ref}”创建本地分支“${branchName}”并立即切换。\n不会覆盖已有分支；工作区不干净时会阻止操作。`,
+      confirmLabel: "确认创建"
+    });
+    if (!approved) return;
+    void runTool("create_git_branch", {
+      repoPath: state.snapshot.repoRoot,
+      branchName,
+      startRef: option.dataset.ref,
+      startRefType: option.dataset.type,
+      limit: state.snapshot.limit
+    }, `正在创建 ${branchName}…`);
+  });
+
+  $("#gbw-new-mr").addEventListener("click", openCreateMergeRequestDialog);
+  $("#gbw-create-mr-cancel").addEventListener("click", () => $("#gbw-create-mr").close());
+  $("#gbw-create-mr-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!state.snapshot || state.busy) return;
+    const sourceBranch = $("#gbw-mr-source").value;
+    const targetBranch = $("#gbw-mr-target").value;
+    const title = $("#gbw-mr-title-input").value.trim();
+    const description = $("#gbw-mr-description").value.trim();
+    const target = $("#gbw-mr-target");
+    target.setCustomValidity(sourceBranch === targetBranch ? "源分支和目标分支不能相同。" : "");
+    if (!event.currentTarget.reportValidity()) return;
+    $("#gbw-create-mr").close();
+    const label = state.snapshot.hosting?.provider === "github" ? "Pull Request" : "Merge Request";
+    const approved = await confirmAction({
+      title: `创建 ${label}`,
+      message: `将通过本机已登录的 ${state.snapshot.hosting?.cli || "gh/glab"} 创建：\n${sourceBranch} → ${targetBranch}\n\n这是远端写操作；不会自动推送，也不会修改 upstream。`,
+      confirmLabel: "确认创建"
+    });
+    if (!approved) return;
+    void runTool("create_merge_request", {
+      repoPath: state.snapshot.repoRoot,
+      sourceBranch,
+      targetBranch,
+      title,
+      description,
+      limit: state.snapshot.limit
+    }, `正在创建 ${label}…`);
+  });
+
+  $("#gbw-refresh").addEventListener("click", () => {
+    if (!state.snapshot) return;
+    void runTool("get_git_snapshot", {
+      repoPath: state.snapshot.repoRoot,
+      ref: state.snapshot.selectedRef,
+      refType: state.snapshot.selectedRefType === "detached" ? undefined : state.snapshot.selectedRefType,
+      limit: state.snapshot.limit
+    }, "正在刷新分支和提交…");
+  });
+
+  $("#gbw-pull").addEventListener("click", async () => {
+    if (!state.snapshot || $("#gbw-pull").disabled) return;
+    const approved = await confirmAction({
+      title: "拉取当前分支",
+      message: `仅从“${state.snapshot.upstream}”执行 fast-forward 拉取。\n不会合并、rebase 或自动设置 upstream。`,
+      confirmLabel: "确认拉取"
+    });
+    if (approved) void runTool("pull_current_branch", { repoPath: state.snapshot.repoRoot, limit: state.snapshot.limit }, "正在快进拉取…");
+  });
+
+  $("#gbw-push").addEventListener("click", async () => {
+    if (!state.snapshot || $("#gbw-push").disabled) return;
+    const approved = await confirmAction({
+      title: "推送当前分支",
+      message: `仅把当前分支“${state.snapshot.currentBranch}”推送到既有 upstream“${state.snapshot.upstream}”。\n不会 force push，也不会创建或修改 upstream。`,
+      confirmLabel: "确认推送"
+    });
+    if (approved) void runTool("push_current_branch", { repoPath: state.snapshot.repoRoot, limit: state.snapshot.limit }, "正在推送当前分支…");
+  });
+
+  $("#gbw-fullscreen").addEventListener("click", async () => {
+    try {
+      if (!window.openai?.requestDisplayMode) throw new Error("当前宿主未提供全屏接口；页面仍可在当前面板中使用。");
+      await window.openai.requestDisplayMode({ mode: "fullscreen" });
+    } catch (error) {
+      showNotice(error?.message || String(error), "error");
+    }
+  });
+
+  $("#gbw-open-workbench").addEventListener("click", async () => {
+    try {
+      if (!window.openai?.requestDisplayMode) throw new Error("当前宿主未提供页面展开接口。");
+      const result = await window.openai.requestDisplayMode({ mode: "fullscreen" });
+      applyDisplayMode(result?.mode || window.openai.displayMode || "fullscreen");
+    } catch (error) {
+      $("#gbw-card-summary").textContent = error?.message || String(error);
+    }
+  });
+
+  window.addEventListener("openai:set_globals", (event) => {
+    const globals = event.detail?.globals || {};
+    const displayMode = globals.displayMode;
+    if (displayMode) applyDisplayMode(displayMode);
+    applyHostContext(globals);
+  }, { passive: true });
+
+  if (typeof ResizeObserver === "function") {
+    const graphObserver = new ResizeObserver(() => scheduleGraphDraw());
+    graphObserver.observe($(".gbw-table-wrap"));
+    const inlineCardObserver = new ResizeObserver(() => scheduleIntrinsicHeightReport());
+    inlineCardObserver.observe($(".gbw-inline-card"));
+  }
+
+  window.addEventListener("resize", scheduleIntrinsicHeightReport, { passive: true });
+
+  applyHostContext(window.openai?.hostContext || { theme: window.openai?.theme, styles: window.openai?.styles });
+  applyDisplayMode(window.openai?.displayMode || "inline");
+  if (window.openai?.toolOutput) render(window.openai.toolOutput);
+})();
+</script>
