@@ -52,6 +52,15 @@ Shared Codex skills for cross-machine installation and team reuse.
   - Pulls only with `--ff-only` on a clean branch with an existing upstream
   - Pushes only `HEAD` to the existing upstream; never sets upstream or force-pushes
 
+- `cicd-pipeline-monitor`
+  - Detects GitHub Actions or GitLab CI/CD from the current repository remote
+  - Reuses the active local `gh` or host-specific `glab` login without storing access tokens
+  - Triggers an explicitly confirmed test, staging, or production pipeline and returns a compact conversation card
+  - Refreshes queued and running pipelines automatically, then stops at success, failure, cancellation, or skip
+  - Shows environment, ref, commit, duration, job progress, and provider failure summary without an internal scrollbar
+  - Opens the exact GitHub or GitLab run in the system browser through a CSP-allowlisted action
+  - Requires explicit provider, repository, workflow, ref, environment, and input confirmation before production release
+
 ## Install Example
 
 On another machine, install this skill from the repo path:
@@ -67,6 +76,13 @@ To install the Git Branch Workbench plugin from this repository:
 ```bash
 codex plugin marketplace add TerraRoot3/OpenSkills --ref main
 codex plugin add git-branch-workbench@openskills
+```
+
+To install the CI/CD Pipeline Monitor plugin from this repository:
+
+```bash
+codex plugin marketplace add TerraRoot3/OpenSkills --ref main
+codex plugin add cicd-pipeline-monitor@openskills
 ```
 
 Start a new Codex task after installation so the plugin's Skill and MCP tools are discovered.

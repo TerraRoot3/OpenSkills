@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "cicd-pipeline-monitor": {
+      "command": "node",
+      "args": ["./scripts/server.mjs"],
+      "cwd": "."
+    }
+  }
+}

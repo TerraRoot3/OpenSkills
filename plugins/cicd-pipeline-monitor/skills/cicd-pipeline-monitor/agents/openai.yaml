@@ -1,0 +1,4 @@
+interface:
+  display_name: "CI/CD Pipeline Monitor"
+  short_description: "Trigger and monitor GitHub or GitLab deployments."
+  default_prompt: "Use $cicd-pipeline-monitor to trigger or monitor the current repository release and show its live status card."

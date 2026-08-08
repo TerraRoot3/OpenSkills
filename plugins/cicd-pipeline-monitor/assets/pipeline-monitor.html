@@ -1,0 +1,662 @@
+<meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#181818">
+
+<article id="cicd-card" class="cicd-card" aria-labelledby="cicd-title" aria-live="polite">
+  <header class="cicd-header">
+    <div id="cicd-provider-icon" class="cicd-provider-icon" aria-hidden="true"></div>
+    <div class="cicd-heading">
+      <div class="cicd-eyebrow">
+        <span id="cicd-provider">CI/CD</span>
+        <span id="cicd-environment" class="cicd-environment" hidden></span>
+      </div>
+      <h2 id="cicd-title">正在读取流水线…</h2>
+    </div>
+    <span id="cicd-status" class="cicd-status is-queued">
+      <span class="cicd-status-dot" aria-hidden="true"></span>
+      <span id="cicd-status-label">等待中</span>
+    </span>
+  </header>
+
+  <div class="cicd-meta" aria-label="流水线信息">
+    <div class="cicd-meta-item">
+      <span>分支</span>
+      <strong id="cicd-ref" translate="no">—</strong>
+    </div>
+    <div class="cicd-meta-item">
+      <span>提交</span>
+      <strong id="cicd-sha" translate="no">—</strong>
+    </div>
+    <div class="cicd-meta-item">
+      <span>耗时</span>
+      <strong id="cicd-duration">—</strong>
+    </div>
+    <div class="cicd-meta-item cicd-repository-item">
+      <span>仓库</span>
+      <strong id="cicd-repository" translate="no">—</strong>
+    </div>
+  </div>
+
+  <section class="cicd-progress-section" aria-labelledby="cicd-progress-label">
+    <div class="cicd-progress-heading">
+      <span id="cicd-progress-label">任务进度</span>
+      <strong id="cicd-progress-count">0 / 0</strong>
+    </div>
+    <div class="cicd-progress-track" aria-hidden="true">
+      <span id="cicd-progress-bar" class="cicd-progress-bar"></span>
+    </div>
+    <div id="cicd-jobs" class="cicd-jobs"></div>
+    <p id="cicd-message" class="cicd-message" hidden></p>
+  </section>
+
+  <footer class="cicd-footer">
+    <span id="cicd-updated" class="cicd-updated">等待状态…</span>
+    <div class="cicd-actions">
+      <button id="cicd-refresh" type="button" class="cicd-icon-button" title="立即刷新" aria-label="立即刷新">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5M4 18v-5h5M18.4 9a7 7 0 0 0-11.7-2.6L4 9m16 6-2.7 2.6A7 7 0 0 1 5.6 15"/></svg>
+      </button>
+      <button id="cicd-open" type="button" class="cicd-open-button" disabled>
+        在系统浏览器打开
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h6"/></svg>
+      </button>
+    </div>
+  </footer>
+</article>
+
+<style>
+  :root {
+    --cicd-bg: #ffffff;
+    --cicd-panel: #f7f7f7;
+    --cicd-border: rgba(0, 0, 0, 0.1);
+    --cicd-border-strong: rgba(0, 0, 0, 0.16);
+    --cicd-text: #202123;
+    --cicd-muted: #6b6b6b;
+    --cicd-subtle: #8a8a8a;
+    --cicd-button: #ededed;
+    --cicd-button-hover: #e3e3e3;
+    --cicd-green: #16845b;
+    --cicd-green-bg: rgba(22, 132, 91, 0.11);
+    --cicd-blue: #267bd9;
+    --cicd-blue-bg: rgba(38, 123, 217, 0.11);
+    --cicd-yellow: #a65f00;
+    --cicd-yellow-bg: rgba(166, 95, 0, 0.11);
+    --cicd-red: #c23b3b;
+    --cicd-red-bg: rgba(194, 59, 59, 0.1);
+    --cicd-gray: #737373;
+    --cicd-gray-bg: rgba(115, 115, 115, 0.1);
+    color-scheme: light;
+  }
+
+  :root[data-theme="dark"] {
+    --cicd-bg: #181818;
+    --cicd-panel: #202020;
+    --cicd-border: rgba(255, 255, 255, 0.09);
+    --cicd-border-strong: rgba(255, 255, 255, 0.16);
+    --cicd-text: #f1f1f1;
+    --cicd-muted: #a3a3a3;
+    --cicd-subtle: #7d7d7d;
+    --cicd-button: #2a2a2a;
+    --cicd-button-hover: #333333;
+    --cicd-green: #54c792;
+    --cicd-green-bg: rgba(84, 199, 146, 0.13);
+    --cicd-blue: #6ba9ef;
+    --cicd-blue-bg: rgba(107, 169, 239, 0.14);
+    --cicd-yellow: #e8a84c;
+    --cicd-yellow-bg: rgba(232, 168, 76, 0.13);
+    --cicd-red: #ef7777;
+    --cicd-red-bg: rgba(239, 119, 119, 0.13);
+    --cicd-gray: #aaa;
+    --cicd-gray-bg: rgba(170, 170, 170, 0.1);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+    background: transparent;
+    color: var(--cicd-text);
+    font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 14px;
+  }
+
+  button { font: inherit; }
+
+  button {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .cicd-card {
+    width: 100%;
+    min-width: 300px;
+    padding: 14px 15px 11px;
+    border: 1px solid var(--cicd-border);
+    border-radius: 14px;
+    background: var(--cicd-bg);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.025);
+    overflow: hidden;
+  }
+
+  .cicd-header {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .cicd-provider-icon {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border: 1px solid var(--cicd-border);
+    border-radius: 9px;
+    background: var(--cicd-panel);
+  }
+
+  .cicd-provider-icon svg {
+    width: 19px;
+    height: 19px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .cicd-provider-icon.is-github svg { fill: currentColor; stroke: none; }
+  .cicd-provider-icon.is-gitlab { color: #e2632a; }
+
+  .cicd-heading { min-width: 0; }
+
+  .cicd-eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    color: var(--cicd-muted);
+    font-size: 11px;
+    line-height: 15px;
+    font-weight: 600;
+  }
+
+  .cicd-environment {
+    max-width: 120px;
+    padding: 0 5px;
+    border-radius: 4px;
+    background: var(--cicd-panel);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cicd-heading h2 {
+    margin: 1px 0 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 14px;
+    line-height: 19px;
+    font-weight: 650;
+  }
+
+  .cicd-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 25px;
+    padding: 0 9px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .cicd-status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  .cicd-status.is-queued { color: var(--cicd-yellow); background: var(--cicd-yellow-bg); }
+  .cicd-status.is-running { color: var(--cicd-blue); background: var(--cicd-blue-bg); }
+  .cicd-status.is-success { color: var(--cicd-green); background: var(--cicd-green-bg); }
+  .cicd-status.is-failed { color: var(--cicd-red); background: var(--cicd-red-bg); }
+  .cicd-status.is-cancelled,
+  .cicd-status.is-skipped,
+  .cicd-status.is-unknown { color: var(--cicd-gray); background: var(--cicd-gray-bg); }
+
+  .cicd-status.is-running .cicd-status-dot,
+  .cicd-status.is-queued .cicd-status-dot { animation: cicd-pulse 1.45s ease-in-out infinite; }
+
+  @keyframes cicd-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: .42; transform: scale(.78); }
+  }
+
+  .cicd-meta {
+    display: grid;
+    grid-template-columns: minmax(78px, 1fr) minmax(68px, .8fr) minmax(60px, .65fr) minmax(120px, 1.4fr);
+    gap: 8px;
+    margin-top: 11px;
+    padding: 8px 10px;
+    border: 1px solid var(--cicd-border);
+    border-radius: 9px;
+    background: var(--cicd-panel);
+  }
+
+  .cicd-meta-item { min-width: 0; }
+  .cicd-meta-item span { display: block; color: var(--cicd-subtle); font-size: 10px; line-height: 13px; }
+  .cicd-meta-item strong {
+    display: block;
+    margin-top: 1px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--cicd-text);
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 550;
+  }
+
+  .cicd-progress-section { margin-top: 10px; }
+
+  .cicd-progress-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: var(--cicd-muted);
+    font-size: 11px;
+    line-height: 15px;
+  }
+
+  .cicd-progress-heading strong { color: var(--cicd-text); font-weight: 600; }
+  .cicd-progress-heading strong,
+  .cicd-meta-item strong { font-variant-numeric: tabular-nums; }
+
+  .cicd-progress-track {
+    height: 3px;
+    margin-top: 5px;
+    border-radius: 99px;
+    background: var(--cicd-border);
+    overflow: hidden;
+  }
+
+  .cicd-progress-bar {
+    display: block;
+    width: 0;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--cicd-blue);
+    transition: width 220ms ease, background-color 220ms ease;
+  }
+
+  .cicd-progress-bar.is-success { background: var(--cicd-green); }
+  .cicd-progress-bar.is-failed { background: var(--cicd-red); }
+  .cicd-progress-bar.is-cancelled,
+  .cicd-progress-bar.is-skipped { background: var(--cicd-gray); }
+
+  .cicd-jobs {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 25px;
+    margin-top: 7px;
+    overflow: hidden;
+  }
+
+  .cicd-job {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+    max-width: 150px;
+    height: 23px;
+    padding: 0 7px;
+    border: 1px solid var(--cicd-border);
+    border-radius: 6px;
+    color: var(--cicd-muted);
+    background: var(--cicd-bg);
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .cicd-job span:last-child { overflow: hidden; text-overflow: ellipsis; }
+
+  .cicd-job-dot {
+    flex: 0 0 auto;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--cicd-gray);
+  }
+
+  .cicd-job.is-queued .cicd-job-dot { background: var(--cicd-yellow); }
+  .cicd-job.is-running .cicd-job-dot { background: var(--cicd-blue); animation: cicd-pulse 1.45s ease-in-out infinite; }
+  .cicd-job.is-success .cicd-job-dot { background: var(--cicd-green); }
+  .cicd-job.is-failed .cicd-job-dot { background: var(--cicd-red); }
+
+  .cicd-job-more { color: var(--cicd-subtle); font-size: 11px; white-space: nowrap; }
+
+  .cicd-jobs-empty {
+    color: var(--cicd-subtle);
+    font-size: 11px;
+  }
+
+  .cicd-message {
+    margin: 6px 0 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--cicd-muted);
+    font-size: 11px;
+    line-height: 15px;
+  }
+
+  .cicd-message.is-error { color: var(--cicd-red); }
+
+  .cicd-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--cicd-border);
+  }
+
+  .cicd-updated {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--cicd-subtle);
+    font-size: 10px;
+  }
+
+  .cicd-actions { display: flex; align-items: center; gap: 6px; }
+
+  .cicd-icon-button,
+  .cicd-open-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 28px;
+    border: 1px solid var(--cicd-border-strong);
+    border-radius: 7px;
+    color: var(--cicd-text);
+    background: var(--cicd-button);
+    cursor: pointer;
+  }
+
+  .cicd-icon-button:hover,
+  .cicd-open-button:hover { background: var(--cicd-button-hover); }
+  .cicd-icon-button:active,
+  .cicd-open-button:active { border-color: var(--cicd-text); }
+  .cicd-icon-button:focus-visible,
+  .cicd-open-button:focus-visible { outline: 2px solid var(--cicd-blue); outline-offset: 2px; }
+  .cicd-icon-button:disabled,
+  .cicd-open-button:disabled { cursor: default; opacity: .48; }
+
+  .cicd-icon-button { width: 28px; padding: 0; }
+  .cicd-open-button { gap: 6px; padding: 0 9px; font-size: 11px; font-weight: 550; }
+  .cicd-icon-button svg,
+  .cicd-open-button svg {
+    width: 14px;
+    height: 14px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .cicd-icon-button.is-loading svg { animation: cicd-spin .8s linear infinite; }
+  @keyframes cicd-spin { to { transform: rotate(360deg); } }
+
+  @media (max-width: 520px) {
+    .cicd-card { min-width: 0; padding: 12px; }
+    .cicd-header { grid-template-columns: 32px minmax(0, 1fr); }
+    .cicd-status { grid-column: 2; justify-self: start; height: 22px; margin-top: -2px; }
+    .cicd-meta { grid-template-columns: 1fr 1fr 1fr; }
+    .cicd-repository-item { display: none; }
+    .cicd-updated { display: none; }
+    .cicd-footer { justify-content: flex-end; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+  }
+</style>
+
+<script>
+(() => {
+  const terminalStatuses = new Set(["success", "failed", "cancelled", "skipped"]);
+  const statusLabels = {
+    queued: "等待中",
+    running: "运行中",
+    success: "已成功",
+    failed: "已失败",
+    cancelled: "已取消",
+    skipped: "已跳过",
+    unknown: "未知"
+  };
+  const state = {
+    snapshot: null,
+    timer: null,
+    refreshing: false,
+    failures: 0,
+    lastHeight: 0
+  };
+  const $ = (selector) => document.querySelector(selector);
+
+  function providerIcon(provider) {
+    if (provider === "gitlab") {
+      return '<svg viewBox="0 0 24 24"><path d="m12 21 8.1-5.9-3.1-9.7-2.1 6.4H9.1L7 5.4l-3.1 9.7L12 21Z"/></svg>';
+    }
+    return '<svg viewBox="0 0 24 24"><path d="M12 2.4a9.8 9.8 0 0 0-3.1 19.1c.5.1.7-.2.7-.5v-1.9c-2.8.6-3.4-1.2-3.4-1.2-.5-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 0 1.6 1.1 1.6 1.1.9 1.6 2.4 1.1 2.9.9.1-.7.4-1.1.7-1.3-2.3-.3-4.6-1.1-4.6-4.9 0-1.1.4-2 1-2.6-.1-.3-.4-1.3.1-2.6 0 0 .8-.3 2.7 1a9.3 9.3 0 0 1 4.9 0c1.9-1.3 2.7-1 2.7-1 .5 1.3.2 2.3.1 2.6.6.7 1 1.5 1 2.6 0 3.8-2.3 4.6-4.6 4.9.4.3.7 1 .7 1.9V21c0 .4.2.6.7.5A9.8 9.8 0 0 0 12 2.4Z"/></svg>';
+  }
+
+  function formatDuration(seconds) {
+    if (!Number.isFinite(seconds)) return "—";
+    const total = Math.max(0, Math.round(seconds));
+    if (total < 60) return `${total} 秒`;
+    const minutes = Math.floor(total / 60);
+    const remain = total % 60;
+    if (minutes < 60) return remain ? `${minutes} 分 ${remain} 秒` : `${minutes} 分`;
+    const hours = Math.floor(minutes / 60);
+    return `${hours} 小时 ${minutes % 60} 分`;
+  }
+
+  function formatUpdated(value) {
+    if (!value) return "刚刚更新";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "刚刚更新";
+    return `更新于 ${new Intl.DateTimeFormat(navigator.languages?.[0] || "zh-CN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit"
+    }).format(date)}`;
+  }
+
+  function reportHeight() {
+    requestAnimationFrame(() => {
+      const height = Math.ceil($("#cicd-card").getBoundingClientRect().height);
+      if (!height || height === state.lastHeight) return;
+      state.lastHeight = height;
+      document.documentElement.style.height = `${height}px`;
+      document.body.style.height = `${height}px`;
+      window.openai?.notifyIntrinsicHeight?.(height);
+    });
+  }
+
+  function applyTheme(globals = {}) {
+    const theme = globals.theme || window.openai?.theme;
+    if (theme === "dark" || theme === "light") {
+      document.documentElement.dataset.theme = theme;
+      document.documentElement.style.colorScheme = theme;
+      const themeColor = document.querySelector('meta[name="theme-color"]');
+      if (themeColor) themeColor.content = theme === "dark" ? "#181818" : "#ffffff";
+    }
+  }
+
+  function renderJobs(jobs) {
+    const container = $("#cicd-jobs");
+    container.replaceChildren();
+    if (!jobs.length) {
+      const empty = document.createElement("span");
+      empty.className = "cicd-jobs-empty";
+      empty.textContent = "等待任务信息…";
+      container.appendChild(empty);
+      return;
+    }
+    const visible = jobs.slice(0, 4);
+    for (const job of visible) {
+      const item = document.createElement("span");
+      item.className = `cicd-job is-${job.status || "unknown"}`;
+      item.title = `${job.stage ? `${job.stage} · ` : ""}${job.name} · ${statusLabels[job.status] || job.rawStatus || "未知"}`;
+      const dot = document.createElement("span");
+      dot.className = "cicd-job-dot";
+      dot.setAttribute("aria-hidden", "true");
+      const name = document.createElement("span");
+      name.textContent = job.name || "未命名任务";
+      item.append(dot, name);
+      container.appendChild(item);
+    }
+    if (jobs.length > visible.length) {
+      const more = document.createElement("span");
+      more.className = "cicd-job-more";
+      more.textContent = `+${jobs.length - visible.length}`;
+      container.appendChild(more);
+    }
+  }
+
+  function render(snapshot) {
+    if (!snapshot || snapshot.kind !== "cicd-monitor") return;
+    state.snapshot = snapshot;
+    const icon = $("#cicd-provider-icon");
+    icon.className = `cicd-provider-icon is-${snapshot.provider || "github"}`;
+    icon.innerHTML = providerIcon(snapshot.provider);
+    $("#cicd-provider").textContent = snapshot.providerLabel || (snapshot.provider === "gitlab" ? "GitLab CI/CD" : "GitHub Actions");
+    const environment = $("#cicd-environment");
+    environment.textContent = snapshot.environment || "";
+    environment.hidden = !snapshot.environment;
+    const suffix = snapshot.runNumber ? ` #${snapshot.runNumber}` : "";
+    $("#cicd-title").textContent = `${snapshot.pipelineName || "CI/CD Pipeline"}${suffix}`;
+
+    const status = snapshot.status || "unknown";
+    $("#cicd-status").className = `cicd-status is-${status}`;
+    $("#cicd-status-label").textContent = statusLabels[status] || "未知";
+    $("#cicd-ref").textContent = snapshot.ref || "—";
+    $("#cicd-sha").textContent = snapshot.sha ? snapshot.sha.slice(0, 8) : "—";
+    $("#cicd-duration").textContent = formatDuration(snapshot.durationSeconds);
+    $("#cicd-repository").textContent = snapshot.repository || "—";
+    $("#cicd-repository").title = snapshot.repository || "";
+
+    const total = Number(snapshot.progress?.total || snapshot.jobs?.length || 0);
+    const completed = Math.min(total, Number(snapshot.progress?.completed || 0));
+    $("#cicd-progress-count").textContent = `${completed} / ${total}`;
+    const ratio = total ? completed / total : terminalStatuses.has(status) ? 1 : status === "running" ? .28 : .08;
+    const bar = $("#cicd-progress-bar");
+    bar.className = `cicd-progress-bar is-${status}`;
+    bar.style.width = `${Math.max(0, Math.min(1, ratio)) * 100}%`;
+    renderJobs(Array.isArray(snapshot.jobs) ? snapshot.jobs : []);
+
+    const message = $("#cicd-message");
+    const messageText = snapshot.errorSummary || snapshot.message || "";
+    message.textContent = messageText;
+    message.className = `cicd-message${snapshot.errorSummary ? " is-error" : ""}`;
+    message.hidden = !messageText;
+    $("#cicd-updated").textContent = formatUpdated(snapshot.updatedAt);
+    $("#cicd-open").disabled = !snapshot.url;
+    schedulePolling();
+    reportHeight();
+  }
+
+  function extractPayload(result) {
+    if (result?.isError) throw new Error(result.content?.[0]?.text || "流水线状态读取失败。");
+    return result?.structuredContent || result?.result?.structuredContent || result?.mcp_tool_result?.structuredContent || null;
+  }
+
+  async function refresh() {
+    if (state.refreshing || !state.snapshot?.monitor) return;
+    state.refreshing = true;
+    $("#cicd-card").setAttribute("aria-busy", "true");
+    $("#cicd-refresh").classList.add("is-loading");
+    $("#cicd-refresh").disabled = true;
+    try {
+      if (!window.openai?.callTool) throw new Error("当前宿主不支持卡片自动刷新。");
+      const result = await window.openai.callTool("get_cicd_run_status", state.snapshot.monitor);
+      const payload = extractPayload(result);
+      if (!payload) throw new Error("流水线状态响应为空。");
+      state.failures = 0;
+      render(payload);
+    } catch (error) {
+      state.failures += 1;
+      const message = $("#cicd-message");
+      message.textContent = error?.message || String(error);
+      message.className = "cicd-message is-error";
+      message.hidden = false;
+      if (state.failures >= 3 && state.timer) {
+        clearTimeout(state.timer);
+        state.timer = null;
+      }
+      if (state.failures < 3) schedulePolling();
+      reportHeight();
+    } finally {
+      state.refreshing = false;
+      $("#cicd-card").removeAttribute("aria-busy");
+      $("#cicd-refresh").classList.remove("is-loading");
+      $("#cicd-refresh").disabled = false;
+    }
+  }
+
+  function schedulePolling() {
+    if (state.timer) clearTimeout(state.timer);
+    state.timer = null;
+    if (!state.snapshot || terminalStatuses.has(state.snapshot.status) || document.hidden || state.failures >= 3) return;
+    state.timer = setTimeout(() => void refresh(), 7000);
+  }
+
+  $("#cicd-refresh").addEventListener("click", () => void refresh());
+  $("#cicd-open").addEventListener("click", async () => {
+    const href = state.snapshot?.url;
+    if (!href) return;
+    try {
+      if (window.openai?.openExternal) await window.openai.openExternal({ href, redirectUrl: false });
+      else window.open(href, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      const message = $("#cicd-message");
+      message.textContent = error?.message || "无法打开系统浏览器。";
+      message.className = "cicd-message is-error";
+      message.hidden = false;
+      reportHeight();
+    }
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      if (state.timer) clearTimeout(state.timer);
+      state.timer = null;
+    } else if (state.snapshot && !terminalStatuses.has(state.snapshot.status)) {
+      void refresh();
+    }
+  });
+
+  window.addEventListener("openai:set_globals", (event) => {
+    const globals = event.detail?.globals || {};
+    applyTheme(globals);
+    if (globals.toolOutput) render(globals.toolOutput);
+  }, { passive: true });
+
+  if (typeof ResizeObserver === "function") new ResizeObserver(reportHeight).observe($("#cicd-card"));
+  applyTheme(window.openai?.hostContext || {});
+  if (window.openai?.toolOutput) render(window.openai.toolOutput);
+})();
+</script>
