@@ -43,7 +43,7 @@ Shared Codex skills for cross-machine installation and team reuse.
 - `git-branch-workbench`
   - Opens as a compact repository card in a Codex conversation and expands into a fullscreen Git workbench
   - Matches Codex light and dark themes with compact native spacing and no extra inline-card height
-  - Groups local branches, remote branches, tags, and Worktrees with independent expand/collapse state
+  - Groups local branches, Worktrees, remote branches, and tags with independent expand/collapse state
   - Reads or switches exact local and remote branches, renders up to 200 parent-topology commits, and shows complete commit details
   - Creates a local branch from an exact branch or tag without overwriting existing branches
   - Creates GitHub PRs or GitLab MRs through an authenticated `gh` or `glab` CLI without automatically pushing
