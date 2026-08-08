@@ -7,8 +7,8 @@ import { spawnSync } from "node:child_process";
 import readline from "node:readline";
 
 const SERVER_NAME = "git-branch-workbench";
-const SERVER_VERSION = "0.4.1";
-const TEMPLATE_URI = "ui://git-branch-workbench/v5.html";
+const SERVER_VERSION = "0.4.2";
+const TEMPLATE_URI = "ui://git-branch-workbench/v6.html";
 const DEFAULT_COMMIT_LIMIT = 200;
 const MAX_COMMIT_LIMIT = 200;
 const scriptDir = dirname(fileURLToPath(import.meta.url));

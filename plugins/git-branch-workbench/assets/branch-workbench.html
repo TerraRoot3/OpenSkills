@@ -153,17 +153,17 @@
               <colgroup>
                 <col data-column-col="graph">
                 <col data-column-col="summary">
-                <col data-column-col="hash">
-                <col data-column-col="date">
                 <col data-column-col="author">
+                <col data-column-col="date">
+                <col data-column-col="hash">
               </colgroup>
               <thead>
                 <tr>
                   <th class="gbw-graph-column" scope="col"><span>图形</span><span class="gbw-column-resizer" role="separator" aria-orientation="vertical" aria-label="调整图形列宽" tabindex="0" data-resize-column="graph"></span></th>
                   <th class="gbw-summary-column" scope="col"><span>提交信息</span><span class="gbw-column-resizer" role="separator" aria-orientation="vertical" aria-label="调整提交信息列宽" tabindex="0" data-resize-column="summary"></span></th>
-                  <th class="gbw-hash-column" scope="col"><span>哈希</span><span class="gbw-column-resizer" role="separator" aria-orientation="vertical" aria-label="调整哈希列宽" tabindex="0" data-resize-column="hash"></span></th>
-                  <th class="gbw-date-column" scope="col"><span>日期</span><span class="gbw-column-resizer" role="separator" aria-orientation="vertical" aria-label="调整日期列宽" tabindex="0" data-resize-column="date"></span></th>
                   <th class="gbw-author-column" scope="col"><span>作者</span><span class="gbw-column-resizer" role="separator" aria-orientation="vertical" aria-label="调整作者列宽" tabindex="0" data-resize-column="author"></span></th>
+                  <th class="gbw-date-column" scope="col"><span>时间</span><span class="gbw-column-resizer" role="separator" aria-orientation="vertical" aria-label="调整时间列宽" tabindex="0" data-resize-column="date"></span></th>
+                  <th class="gbw-hash-column" scope="col"><span>哈希</span><span class="gbw-column-resizer" role="separator" aria-orientation="vertical" aria-label="调整哈希列宽" tabindex="0" data-resize-column="hash"></span></th>
                 </tr>
               </thead>
               <tbody id="gbw-commits"></tbody>
@@ -521,7 +521,7 @@
   const root = document.getElementById("git-branch-workbench");
   const $ = (selector) => root.querySelector(selector);
   const savedWidgetState = window.openai?.widgetState?.privateContent || window.openai?.widgetState || {};
-  const columnKeys = ["graph", "summary", "hash", "date", "author"];
+  const columnKeys = ["graph", "summary", "author", "date", "hash"];
   const columnLimits = {
     graph: { min: 56, max: 360 },
     summary: { min: 260, max: 1200 },
@@ -1520,7 +1520,7 @@
       author.title = commit.author || "—";
       authorCell.appendChild(author);
 
-      row.append(graph, messageCell, hashCell, dateCell, authorCell);
+      row.append(graph, messageCell, authorCell, dateCell, hashCell);
       body.appendChild(row);
     }
 
