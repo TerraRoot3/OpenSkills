@@ -23,6 +23,13 @@
       打开工作台
       <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg>
     </button>
+    <div class="gbw-card-preview" role="region" aria-labelledby="gbw-card-preview-title">
+      <div class="gbw-card-preview-heading">
+        <strong id="gbw-card-preview-title">最近提交</strong>
+        <span id="gbw-card-ref-summary">0 个本地分支 · 0 个远端分支 · 0 个标签</span>
+      </div>
+      <ol id="gbw-card-commits" class="gbw-card-commit-list"></ol>
+    </div>
   </section>
 
   <a class="gbw-skip" href="#gbw-history">跳到提交记录</a>
@@ -307,7 +314,7 @@
   #git-branch-workbench[data-display-mode="inline"] { height: auto; min-height: 0; display: block; overflow: visible; background: transparent; }
   #git-branch-workbench[data-display-mode="inline"] > :not(.gbw-inline-card) { display: none !important; }
   .gbw-inline-card { display: none; }
-  #git-branch-workbench[data-display-mode="inline"] .gbw-inline-card { min-width: 0; min-height: 62px; padding: 9px 10px; display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; align-items: center; gap: 9px; border: 1px solid var(--gbw-border); border-radius: var(--gbw-radius); color: var(--gbw-text); background: var(--gbw-surface); box-shadow: 0 1px 2px rgb(0 0 0 / .05); }
+  #git-branch-workbench[data-display-mode="inline"] .gbw-inline-card { min-width: 0; height: 198px; min-height: 198px; padding: 9px 10px; display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; grid-template-rows: 39px minmax(0, 1fr); align-items: center; column-gap: 9px; row-gap: 8px; border: 1px solid var(--gbw-border); border-radius: var(--gbw-radius); color: var(--gbw-text); background: var(--gbw-surface); box-shadow: 0 1px 2px rgb(0 0 0 / .05); }
   .gbw-card-icon { width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid var(--gbw-border); border-radius: var(--gbw-radius-sm); color: var(--gbw-blue); background: var(--gbw-blue-soft); }
   .gbw-card-icon svg { width: 17px; height: 17px; }
   .gbw-card-copy { min-width: 0; }
@@ -322,6 +329,22 @@
   #git-branch-workbench .gbw-card-open:hover { border-color: var(--gbw-blue); background: var(--gbw-surface-hover); }
   #git-branch-workbench .gbw-card-open:active { transform: translateY(1px); }
   .gbw-card-open svg { width: 14px; height: 14px; }
+  .gbw-card-preview { min-width: 0; min-height: 0; grid-column: 1 / -1; align-self: stretch; padding-top: 7px; display: grid; grid-template-rows: 20px minmax(0, 1fr); border-top: 1px solid var(--gbw-border); }
+  .gbw-card-preview-heading { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .gbw-card-preview-heading strong { flex: none; color: var(--gbw-muted); font-size: 10px; line-height: 1; font-weight: 650; }
+  .gbw-card-preview-heading span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--gbw-faint); font-size: 9px; line-height: 1; font-variant-numeric: tabular-nums; }
+  .gbw-card-commit-list { min-width: 0; min-height: 0; margin: 0; padding: 0; display: grid; grid-template-rows: repeat(4, minmax(0, 1fr)); list-style: none; }
+  .gbw-card-commit { min-width: 0; min-height: 0; display: grid; grid-template-columns: 7px 55px minmax(0, 1fr) minmax(72px, 110px) 86px; align-items: center; gap: 7px; color: var(--gbw-muted); font-size: 10px; }
+  .gbw-card-commit-dot { width: 5px; height: 5px; border-radius: 999px; background: var(--gbw-series-1); box-shadow: 0 0 0 2px color-mix(in srgb, var(--gbw-series-1) 18%, transparent); }
+  .gbw-card-commit:nth-child(5n + 2) .gbw-card-commit-dot { background: var(--gbw-series-2); box-shadow: 0 0 0 2px color-mix(in srgb, var(--gbw-series-2) 18%, transparent); }
+  .gbw-card-commit:nth-child(5n + 3) .gbw-card-commit-dot { background: var(--gbw-series-3); box-shadow: 0 0 0 2px color-mix(in srgb, var(--gbw-series-3) 18%, transparent); }
+  .gbw-card-commit:nth-child(5n + 4) .gbw-card-commit-dot { background: var(--gbw-series-4); box-shadow: 0 0 0 2px color-mix(in srgb, var(--gbw-series-4) 18%, transparent); }
+  .gbw-card-commit code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--gbw-blue); font: 600 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .gbw-card-commit-subject, .gbw-card-commit-author, .gbw-card-commit time { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .gbw-card-commit-subject { color: var(--gbw-text); font-size: 11px; }
+  .gbw-card-commit-author { color: var(--gbw-muted); text-align: right; }
+  .gbw-card-commit time { color: var(--gbw-faint); text-align: right; font-variant-numeric: tabular-nums; }
+  .gbw-card-commit-empty { grid-row: 1 / -1; display: grid; place-items: center; color: var(--gbw-faint); font-size: 10px; }
 
   .gbw-skip { position: fixed; z-index: 50; left: 12px; top: 8px; padding: 8px 12px; border-radius: 7px; color: #fff; background: #1f5fd1; transform: translateY(-160%); transition: transform 120ms ease; }
   .gbw-skip:focus-visible { transform: translateY(0); }
@@ -505,8 +528,10 @@
   }
 
   @media (max-width: 520px) {
-    #git-branch-workbench[data-display-mode="inline"] .gbw-inline-card { grid-template-columns: 32px minmax(0, 1fr); }
+    #git-branch-workbench[data-display-mode="inline"] .gbw-inline-card { height: 236px; min-height: 236px; grid-template-columns: 32px minmax(0, 1fr); grid-template-rows: 39px 30px minmax(0, 1fr); }
     #git-branch-workbench .gbw-card-open { grid-column: 1 / -1; width: 100%; justify-content: center; }
+    .gbw-card-commit { grid-template-columns: 7px 55px minmax(0, 1fr) 78px; }
+    .gbw-card-commit-author { display: none; }
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -673,6 +698,44 @@
       hour: "2-digit",
       minute: "2-digit"
     }).format(date);
+  }
+
+  function renderInlineCommits(commits) {
+    const target = $("#gbw-card-commits");
+    target.replaceChildren();
+    const recent = commits.slice(0, 4);
+    if (!recent.length) {
+      const empty = document.createElement("li");
+      empty.className = "gbw-card-commit-empty";
+      empty.textContent = "暂无提交";
+      target.appendChild(empty);
+      return;
+    }
+
+    for (const commit of recent) {
+      const row = document.createElement("li");
+      row.className = "gbw-card-commit";
+      row.title = `${commit.shortHash || commit.hash || "—"} · ${commit.subject || "(无提交说明)"} · ${commit.author || "未知作者"} · ${formatDate(commit.date)}`;
+
+      const dot = document.createElement("span");
+      dot.className = "gbw-card-commit-dot";
+      dot.setAttribute("aria-hidden", "true");
+      const hash = document.createElement("code");
+      hash.textContent = commit.shortHash || String(commit.hash || "").slice(0, 7) || "—";
+      hash.setAttribute("translate", "no");
+      const subject = document.createElement("span");
+      subject.className = "gbw-card-commit-subject";
+      subject.textContent = commit.subject || "(无提交说明)";
+      const author = document.createElement("span");
+      author.className = "gbw-card-commit-author";
+      author.textContent = commit.author || "未知作者";
+      const time = document.createElement("time");
+      time.className = "gbw-card-commit-time";
+      time.dateTime = commit.date || "";
+      time.textContent = formatDate(commit.date);
+      row.append(dot, hash, subject, author, time);
+      target.appendChild(row);
+    }
   }
 
   function icon(path) {
@@ -1615,6 +1678,7 @@
     const worktrees = Array.isArray(snapshot.worktrees) ? snapshot.worktrees : [];
     const totalRefs = localBranches.length + remoteBranches.length + tags.length + worktrees.length;
     setText("#gbw-card-summary", `${formatNumber(localBranches.length + remoteBranches.length)} 个分支 · ${formatNumber(tags.length)} 个标签 · ${formatNumber(snapshot.commits.length)} 条提交`);
+    setText("#gbw-card-ref-summary", `${formatNumber(localBranches.length)} 个本地分支 · ${formatNumber(remoteBranches.length)} 个远端分支 · ${formatNumber(tags.length)} 个标签 · ${formatNumber(snapshot.commits.length)} 条提交`);
     setText("#gbw-branch-total", formatNumber(totalRefs));
     setText("#gbw-local-count", formatNumber(localBranches.length));
     setText("#gbw-remote-count", formatNumber(remoteBranches.length));
@@ -1628,6 +1692,7 @@
     renderBranchList(remoteBranches, "remote");
     renderTagList(tags);
     renderWorktreeList(worktrees, localBranches);
+    renderInlineCommits(snapshot.commits);
     for (const group of ["local", "remote", "tags", "worktrees"]) applyGroupState(group);
     renderCommits(snapshot.commits);
     updateActionState();
