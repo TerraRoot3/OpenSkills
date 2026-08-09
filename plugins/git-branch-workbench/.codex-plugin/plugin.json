@@ -1,6 +1,6 @@
 {
   "name": "git-branch-workbench",
-  "version": "0.1.0+codex.20260809102251",
+  "version": "0.1.0+codex.20260809123701",
   "description": "Open a Codex-native multi-project Git branch workbench with a saved projects directory, local repository selector, and OpenGit-style history.",
   "author": {
     "name": "Han Baokun"

@@ -5,11 +5,12 @@ import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import { mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import readline from "node:readline";
 
 const SERVER_NAME = "git-branch-workbench";
-const SERVER_VERSION = "0.5.0";
-const TEMPLATE_URI = "ui://git-branch-workbench/v11.html";
+const SERVER_VERSION = "0.7.0";
+const TEMPLATE_URI = "ui://git-branch-workbench/v13.html";
 const DEFAULT_COMMIT_LIMIT = 200;
 const MAX_COMMIT_LIMIT = 200;
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -194,6 +195,29 @@ const toolDefinitions = [
       ...widgetMeta,
       "openai/toolInvocation/invoking": "Reading Git history…",
       "openai/toolInvocation/invoked": "Git history loaded."
+    }
+  },
+  {
+    name: "get_git_watch_state",
+    title: "Get Git Watch State",
+    description: "Read a lightweight hash of the current branch, HEAD, refs, tags, worktrees, index, fetch/merge/rebase state, and porcelain status without loading commit history.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        repoPath: repoPathProperty
+      },
+      required: ["repoPath"]
+    },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false
+    },
+    _meta: {
+      ...widgetMeta,
+      ui: { visibility: ["app"] }
     }
   },
   {
@@ -620,6 +644,7 @@ function normalizeLimit(value) {
 function parseStatus(rawStatus) {
   const result = {
     branch: "HEAD detached",
+    branchOid: "",
     upstream: "",
     ahead: 0,
     behind: 0,
@@ -631,6 +656,9 @@ function parseStatus(rawStatus) {
     if (line.startsWith("# branch.head ")) {
       const branch = line.slice(14).trim();
       result.branch = branch === "(detached)" ? "HEAD detached" : branch;
+    } else if (line.startsWith("# branch.oid ")) {
+      const branchOid = line.slice(13).trim();
+      result.branchOid = branchOid === "(initial)" ? "" : branchOid;
     } else if (line.startsWith("# branch.upstream ")) result.upstream = line.slice(18).trim();
     else if (line.startsWith("# branch.ab ")) {
       const match = line.match(/\+(\d+)\s+-(\d+)/);
@@ -885,7 +913,7 @@ function selectRevision(input, refs, currentBranch, head) {
   return { selectedRef: "HEAD", selectedRefType: "detached", revision: head };
 }
 
-function getSnapshot(input = {}, operation = null) {
+function getSnapshot(input = {}, operation = null, consistencyAttempt = 0) {
   const repoRoot = resolveRepoRoot(input.repoPath);
   const limit = normalizeLimit(input.limit);
   const status = parseStatus(runGit(repoRoot, ["status", "--porcelain=v2", "--branch"]).stdout);
@@ -896,7 +924,7 @@ function getSnapshot(input = {}, operation = null) {
     repoRoot,
     [
       "log",
-      selection.revision,
+      "--all",
       "--topo-order",
       `--max-count=${limit}`,
       "--date=iso-strict",
@@ -907,6 +935,14 @@ function getSnapshot(input = {}, operation = null) {
   );
   const worktreeResult = runGit(repoRoot, ["worktree", "list", "--porcelain"], { allowFailure: true });
   const hosting = getHostingInfo(repoRoot, refs, status);
+  const watchState = getGitWatchState({ repoPath: repoRoot });
+  if (
+    consistencyAttempt < 1 &&
+    (watchState.currentBranch !== status.branch || watchState.head !== head ||
+      watchState.clean !== status.clean || watchState.changedFiles !== status.changedFiles)
+  ) {
+    return getSnapshot(input, operation, consistencyAttempt + 1);
+  }
 
   const snapshot = {
     schemaVersion: 5,
@@ -931,11 +967,76 @@ function getSnapshot(input = {}, operation = null) {
     hosting,
     mergeTargets: hosting.mergeTargets,
     suggestedBaseBranch: hosting.suggestedBaseBranch,
+    watchSignature: watchState.signature,
     limit,
     operation
   };
   rememberRecentRepository(repoRoot);
   return snapshot;
+}
+
+function getPathStat(label, absolutePath) {
+  try {
+    const stat = statSync(absolutePath);
+    return `${label}:${Math.trunc(stat.mtimeMs)}:${stat.size}`;
+  } catch {
+    return `${label}:missing`;
+  }
+}
+
+function getGitPathStats(repoRoot) {
+  const [gitDirRaw = "", commonDirRaw = ""] = runGit(
+    repoRoot,
+    ["rev-parse", "--absolute-git-dir", "--git-common-dir"],
+    { allowFailure: true }
+  ).stdout.split("\n");
+  const gitDir = gitDirRaw.trim();
+  const commonDirValue = commonDirRaw.trim();
+  const commonDir = isAbsolute(commonDirValue) ? commonDirValue : resolve(repoRoot, commonDirValue || gitDir);
+  if (!gitDir) return ["git-dir:missing"];
+  return [
+    getPathStat("HEAD", join(gitDir, "HEAD")),
+    getPathStat("index", join(gitDir, "index")),
+    getPathStat("MERGE_HEAD", join(gitDir, "MERGE_HEAD")),
+    getPathStat("rebase-merge", join(gitDir, "rebase-merge")),
+    getPathStat("rebase-apply", join(gitDir, "rebase-apply")),
+    getPathStat("FETCH_HEAD", join(commonDir, "FETCH_HEAD")),
+    getPathStat("packed-refs", join(commonDir, "packed-refs"))
+  ];
+}
+
+function getGitWatchState(input = {}) {
+  const repoRoot = resolveRepoRoot(input.repoPath);
+  const statusOutput = runGit(repoRoot, ["status", "--porcelain=v2", "--branch"]).stdout;
+  const status = parseStatus(statusOutput);
+  const head = status.branchOid;
+  const refs = runGit(
+    repoRoot,
+    [
+      "for-each-ref",
+      "--format=%(refname)%00%(objectname)%00%(symref)",
+      "refs/heads",
+      "refs/remotes",
+      "refs/tags"
+    ],
+    { allowFailure: true }
+  ).stdout;
+  const worktrees = runGit(repoRoot, ["worktree", "list", "--porcelain"], { allowFailure: true }).stdout;
+  const gitPathStats = getGitPathStats(repoRoot);
+  const signature = createHash("sha256")
+    .update([statusOutput, head, refs, worktrees, ...gitPathStats].join("\u0000"))
+    .digest("hex");
+
+  return {
+    schemaVersion: 1,
+    kind: "gitWatchState",
+    repoRoot,
+    currentBranch: status.branch,
+    head,
+    clean: status.clean,
+    changedFiles: status.changedFiles,
+    signature
+  };
 }
 
 function ensureClean(repoRoot) {
@@ -981,8 +1082,13 @@ function switchBranch(input = {}) {
     }
   }
 
+  const actualStatus = parseStatus(runGit(repoRoot, ["status", "--porcelain=v2", "--branch"]).stdout);
+  if (actualStatus.branch !== nextBranch) {
+    throw new Error(`Git 已返回切换成功，但实际 HEAD 位于 ${actualStatus.branch}，不是 ${nextBranch}。请刷新后重试。`);
+  }
+
   return getSnapshot(
-    { repoPath: repoRoot, ref: nextBranch, refType: "local", limit: normalizeLimit(input.limit) },
+    { repoPath: repoRoot, ref: actualStatus.branch, refType: "local", limit: normalizeLimit(input.limit) },
     { type: "switch", ok: true, message }
   );
 }
@@ -1248,7 +1354,7 @@ function chooseNativeProjectsRoot(input = {}) {
 function toolResult(snapshot, render = false) {
   const isRepositorySnapshot = Array.isArray(snapshot?.commits);
   const summary = isRepositorySnapshot
-    ? `${snapshot.repoName}: ${snapshot.currentBranch}, ${snapshot.commits.length} commits on ${snapshot.selectedRef}, ${snapshot.localBranches.length} local branches, ${snapshot.remoteBranches.length} remote branches, ${snapshot.tags.length} tags, ${snapshot.worktrees.length} worktrees.`
+    ? `${snapshot.repoName}: ${snapshot.currentBranch}, ${snapshot.commits.length} commits across all refs, ${snapshot.localBranches.length} local branches, ${snapshot.remoteBranches.length} remote branches, ${snapshot.tags.length} tags, ${snapshot.worktrees.length} worktrees.`
     : "Choose a local Git repository to open in Git Branch Workbench.";
   const result = {
     structuredContent: snapshot,
@@ -1261,6 +1367,13 @@ function toolResult(snapshot, render = false) {
     };
   }
   return result;
+}
+
+function watchResult(watchState) {
+  return {
+    structuredContent: watchState,
+    content: [{ type: "text", text: `Git watch state: ${watchState.currentBranch}.` }]
+  };
 }
 
 function homeResult() {
@@ -1375,6 +1488,10 @@ async function handleRequest(message) {
       }
       if (toolName === "get_git_snapshot") {
         rpcResult(id, toolResult(getSnapshot(args)));
+        return;
+      }
+      if (toolName === "get_git_watch_state") {
+        rpcResult(id, watchResult(getGitWatchState(args)));
         return;
       }
       if (toolName === "open_git_branch_workbench") {

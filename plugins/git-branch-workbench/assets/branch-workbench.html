@@ -467,7 +467,7 @@
   .gbw-group-title .gbw-chevron { width: 10px; height: 10px; transition: transform 120ms ease; }
   .gbw-group-heading[aria-expanded="true"] .gbw-chevron { transform: rotate(90deg); }
   .gbw-branch-list { display: grid; gap: 1px; }
-  .gbw-branch-row { min-width: 0; display: flex; align-items: stretch; border: 1px solid transparent; border-radius: 7px; overflow: hidden; }
+  .gbw-branch-row { position: relative; min-width: 0; display: flex; align-items: stretch; border: 1px solid transparent; border-radius: 7px; overflow: hidden; }
   .gbw-branch-row:hover { background: var(--gbw-surface-hover); }
   .gbw-branch-row.is-selected { border-color: color-mix(in srgb, var(--gbw-blue) 35%, transparent); background: var(--gbw-blue-soft); }
   .gbw-branch-row.is-current { background: var(--gbw-surface-soft); }
@@ -480,11 +480,14 @@
   .gbw-branch-sync { flex: none; display: inline-flex; gap: 4px; color: var(--gbw-faint); font-size: 10px; font-variant-numeric: tabular-nums; }
   .gbw-branch-sync .up { color: var(--gbw-green); }
   .gbw-branch-sync .down { color: var(--gbw-amber); }
-  #git-branch-workbench .gbw-branch-switch { width: 29px; flex: none; border: 0; border-left: 1px solid transparent; display: grid; place-items: center; color: var(--gbw-faint); background: transparent; cursor: pointer; opacity: 0; transition: opacity 100ms ease, color 100ms ease, background-color 100ms ease; }
+  #git-branch-workbench .gbw-branch-switch { position: absolute; z-index: 2; inset: 0 0 0 auto; width: 29px; border: 0; border-left: 1px solid transparent; display: grid; place-items: center; color: var(--gbw-faint); background: transparent; cursor: pointer; opacity: 0; transition: opacity 100ms ease, color 100ms ease, background-color 100ms ease; }
   #git-branch-workbench .gbw-branch-switch:hover { color: var(--gbw-blue); background: color-mix(in srgb, var(--gbw-blue) 10%, transparent); }
   .gbw-branch-row:hover .gbw-branch-switch,
   .gbw-branch-switch:focus-visible,
   .gbw-branch-row.is-selected .gbw-branch-switch { opacity: 1; }
+  .gbw-branch-row:hover .gbw-branch-switch { background-color: var(--gbw-surface-hover); }
+  .gbw-branch-row.is-selected .gbw-branch-switch { background-color: var(--gbw-blue-soft); }
+  .gbw-branch-row:hover .gbw-branch-switch:hover { background-color: color-mix(in srgb, var(--gbw-blue) 10%, var(--gbw-surface-hover)); }
   .gbw-branch-switch svg { width: 14px; height: 14px; }
   .gbw-current-mark { width: 29px; display: grid; place-items: center; color: var(--gbw-green); font-size: 11px; }
   .gbw-ref-meta { max-width: 72px; flex: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--gbw-faint); font-size: 9px; }
@@ -646,6 +649,7 @@
     author: { min: 90, max: 420 }
   };
   const sidebarLimits = { min: 180, max: 520, default: 248 };
+  const gitWatchIntervalMs = 3000;
   const savedColumnWidths = {};
   for (const key of columnKeys) {
     const value = Number(savedWidgetState.columnWidths?.[key]);
@@ -678,7 +682,12 @@
       : sidebarLimits.default,
     intrinsicHeightFrame: null,
     forceIntrinsicHeightReport: false,
-    lastIntrinsicHeight: null
+    lastIntrinsicHeight: null,
+    watchSignature: null,
+    watchRepoRoot: "",
+    monitorTimer: null,
+    monitorBusy: false,
+    monitorEpoch: 0
   };
   const graphColorFallbacks = [
     "#5b8def", "#4cb7a5", "#d89b3c", "#d96c85", "#8b73d6",
@@ -778,6 +787,14 @@
   function getSnapshot(result) {
     if (result?.isError) throw new Error(result.content?.[0]?.text || "Git 操作失败，请检查仓库状态后重试。");
     return result?.structuredContent || result?.result?.structuredContent || null;
+  }
+
+  function isRenderableSnapshot(value) {
+    return value?.view === "home" || Array.isArray(value?.commits);
+  }
+
+  function isGitWatchState(value) {
+    return value?.kind === "gitWatchState" && typeof value.signature === "string";
   }
 
   function setText(selector, value) {
@@ -882,12 +899,28 @@
 
   async function runTool(name, args, pendingMessage) {
     if (state.busy) return;
+    state.monitorEpoch += 1;
     setBusy(true);
     showNotice(pendingMessage, "success");
     try {
       const result = await callTool(name, args);
-      const snapshot = getSnapshot(result);
+      let snapshot = getSnapshot(result);
       if (!snapshot) throw new Error("操作已返回，但没有仓库快照。请刷新后重试。");
+      const operation = snapshot.operation;
+      if (name === "switch_git_branch" || name === "create_git_branch") {
+        try {
+          const verificationResult = await callTool("get_git_snapshot", {
+            repoPath: snapshot.repoRoot || args.repoPath,
+            limit: snapshot.limit || args.limit || 200
+          });
+          const authoritativeSnapshot = getSnapshot(verificationResult);
+          if (isRenderableSnapshot(authoritativeSnapshot)) {
+            snapshot = { ...authoritativeSnapshot, operation };
+          }
+        } catch {
+          // The operation result is already a complete server-verified snapshot.
+        }
+      }
       render(snapshot);
       showNotice(snapshot.operation?.message || "操作完成", "success");
     } catch (error) {
@@ -895,6 +928,70 @@
     } finally {
       setBusy(false);
       updateActionState();
+    }
+  }
+
+  function monitorSnapshotArgs(watchState) {
+    const snapshot = state.snapshot;
+    const args = {
+      repoPath: snapshot.repoRoot,
+      limit: snapshot.limit || 200
+    };
+    const canPreserveSelection = watchState.currentBranch === snapshot.currentBranch &&
+      ["local", "remote", "tag"].includes(snapshot.selectedRefType) &&
+      typeof snapshot.selectedRef === "string" && snapshot.selectedRef;
+    if (canPreserveSelection) {
+      args.ref = snapshot.selectedRef;
+      args.refType = snapshot.selectedRefType;
+    }
+    return args;
+  }
+
+  async function readMonitoredSnapshot(args) {
+    const result = await callTool("get_git_snapshot", args);
+    try {
+      return getSnapshot(result);
+    } catch (error) {
+      if (!args.ref) throw error;
+      const fallbackResult = await callTool("get_git_snapshot", {
+        repoPath: args.repoPath,
+        limit: args.limit
+      });
+      return getSnapshot(fallbackResult);
+    }
+  }
+
+  async function pollGitWatch() {
+    if (!state.snapshot || state.busy || state.monitorBusy || document.visibilityState === "hidden") return;
+    const repoRoot = state.snapshot.repoRoot;
+    const epoch = state.monitorEpoch;
+    state.monitorBusy = true;
+    try {
+      const result = await callTool("get_git_watch_state", { repoPath: repoRoot });
+      const watchState = getSnapshot(result);
+      if (!isGitWatchState(watchState) || state.busy || epoch !== state.monitorEpoch || state.snapshot?.repoRoot !== repoRoot) return;
+
+      const previousSignature = state.watchRepoRoot === repoRoot ? state.watchSignature : null;
+      state.watchRepoRoot = repoRoot;
+      if (!previousSignature) {
+        const snapshotStillMatches = watchState.currentBranch === state.snapshot.currentBranch &&
+          watchState.head === state.snapshot.head &&
+          watchState.clean === state.snapshot.clean &&
+          watchState.changedFiles === state.snapshot.changedFiles;
+        if (snapshotStillMatches) {
+          state.watchSignature = watchState.signature;
+          return;
+        }
+      }
+      if (previousSignature === watchState.signature) return;
+
+      const snapshot = await readMonitoredSnapshot(monitorSnapshotArgs(watchState));
+      if (!isRenderableSnapshot(snapshot) || state.busy || epoch !== state.monitorEpoch || state.snapshot?.repoRoot !== repoRoot) return;
+      render(snapshot);
+    } catch {
+      // Monitoring is best effort; manual refresh remains available.
+    } finally {
+      state.monitorBusy = false;
     }
   }
 
@@ -1420,6 +1517,27 @@
     persistWidgetState();
   }
 
+  function locateBranchTip(branch) {
+    const targetHash = String(branch?.hash || "").trim();
+    const commit = (state.snapshot?.commits || []).find((item) => item.hash === targetHash);
+    if (!commit) {
+      showNotice(`分支 ${branch?.name || "—"} 的最新提交不在当前 200 条记录中。`, "error");
+      return;
+    }
+
+    selectCommit(commit);
+    const row = [...root.querySelectorAll("#gbw-commits tr")]
+      .find((item) => item.dataset.hash === targetHash);
+    if (!row) return;
+    const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+    row.scrollIntoView({
+      block: "center",
+      inline: "nearest",
+      behavior: reducedMotion ? "auto" : "smooth"
+    });
+    row.querySelector(".gbw-commit-select")?.focus({ preventScroll: true });
+  }
+
   function makeSyncBadge(branch) {
     const sync = document.createElement("span");
     sync.className = "gbw-branch-sync";
@@ -1438,6 +1556,24 @@
     return sync;
   }
 
+  async function requestBranchSwitch({ branch, type, repoRoot, limit }) {
+    if (!state.snapshot || state.busy || state.snapshot.repoRoot !== repoRoot) return;
+    const approved = await confirmAction({
+      title: "切换分支",
+      message: type === "remote"
+        ? `将远端分支“${branch.name}”检出到本地。\n若同名本地分支不存在，将创建跟踪分支；工作区有未提交改动时会阻止操作。`
+        : `将工作区切换到本地分支“${branch.name}”。\n工作区有未提交改动时，操作会被阻止。`,
+      confirmLabel: "确认切换"
+    });
+    if (!approved || state.busy || state.snapshot?.repoRoot !== repoRoot) return;
+    await runTool("switch_git_branch", {
+      repoPath: repoRoot,
+      branch: branch.name,
+      branchType: type,
+      limit
+    }, `正在切换到 ${branch.name}…`);
+  }
+
   function renderBranchList(branches, type) {
     const target = type === "remote" ? $("#gbw-remote-list") : $("#gbw-local-list");
     target.replaceChildren();
@@ -1453,6 +1589,8 @@
       const current = type === "local" && branch.name === state.snapshot.currentBranch;
       const trackingCurrent = type === "remote" && branch.trackingLocal === state.snapshot.currentBranch;
       const selected = branch.name === state.snapshot.selectedRef && type === state.snapshot.selectedRefType;
+      const repoRoot = state.snapshot.repoRoot;
+      const limit = state.snapshot.limit;
       const row = document.createElement("div");
       row.className = "gbw-branch-row";
       row.classList.toggle("is-current", current || trackingCurrent);
@@ -1462,7 +1600,9 @@
       main.type = "button";
       main.className = "gbw-branch-main";
       main.setAttribute("aria-pressed", String(selected));
-      main.title = `查看${type === "remote" ? "远端" : "本地"}分支 ${branch.name} 的提交记录`;
+      main.title = current || trackingCurrent
+        ? `当前工作区分支；单击定位 ${branch.name} 的最新提交`
+        : `单击定位 ${branch.name} 的最新提交；双击切换分支`;
       const dot = document.createElement("span");
       dot.className = "gbw-branch-dot";
       dot.setAttribute("aria-hidden", "true");
@@ -1472,46 +1612,39 @@
       name.setAttribute("translate", "no");
       main.append(dot, name);
       if (type === "local" && (branch.ahead > 0 || branch.behind > 0)) main.appendChild(makeSyncBadge(branch));
-      main.addEventListener("click", () => {
-        if (state.busy || selected) return;
-        void runTool("get_git_snapshot", {
-          repoPath: state.snapshot.repoRoot,
-          ref: branch.name,
-          refType: type,
-          limit: state.snapshot.limit
-        }, `正在读取 ${branch.name}…`);
+      let locateTimer = null;
+      main.addEventListener("click", (event) => {
+        if (event.detail > 1) {
+          window.clearTimeout(locateTimer);
+          locateTimer = null;
+          return;
+        }
+        if (state.busy) return;
+        window.clearTimeout(locateTimer);
+        locateTimer = window.setTimeout(() => {
+          locateTimer = null;
+          if (state.busy || state.snapshot?.repoRoot !== repoRoot) return;
+          locateBranchTip(branch);
+        }, 220);
+      });
+      main.addEventListener("dblclick", (event) => {
+        event.preventDefault();
+        window.clearTimeout(locateTimer);
+        locateTimer = null;
+        if (current || trackingCurrent) return;
+        void requestBranchSwitch({ branch, type, repoRoot, limit });
       });
       row.appendChild(main);
 
-      if (current || trackingCurrent) {
-        const mark = document.createElement("span");
-        mark.className = "gbw-current-mark";
-        mark.textContent = "✓";
-        mark.title = current ? "当前工作区分支" : `当前本地分支 ${branch.trackingLocal} 跟踪此远端分支`;
-        row.appendChild(mark);
-      } else {
+      if (!current && !trackingCurrent) {
         const switchButton = document.createElement("button");
         switchButton.type = "button";
         switchButton.className = "gbw-branch-switch";
         switchButton.setAttribute("aria-label", `切换到${type === "remote" ? "远端" : "本地"}分支 ${branch.name}`);
         switchButton.title = type === "remote" ? "创建或切换到同名本地跟踪分支" : "切换到此分支";
         switchButton.appendChild(icon("M5 12h13M13 7l5 5-5 5"));
-        switchButton.addEventListener("click", async () => {
-          if (state.busy) return;
-          const approved = await confirmAction({
-            title: "切换分支",
-            message: type === "remote"
-              ? `将远端分支“${branch.name}”检出到本地。\n若同名本地分支不存在，将创建跟踪分支；工作区有未提交改动时会阻止操作。`
-              : `将工作区切换到本地分支“${branch.name}”。\n工作区有未提交改动时，操作会被阻止。`,
-            confirmLabel: "确认切换"
-          });
-          if (!approved) return;
-          void runTool("switch_git_branch", {
-            repoPath: state.snapshot.repoRoot,
-            branch: branch.name,
-            branchType: type,
-            limit: state.snapshot.limit
-          }, `正在切换到 ${branch.name}…`);
+        switchButton.addEventListener("click", () => {
+          void requestBranchSwitch({ branch, type, repoRoot, limit });
         });
         row.appendChild(switchButton);
       }
@@ -1740,7 +1873,7 @@
     $("#gbw-empty").hidden = commits.length > 0;
     $("#gbw-table-shell").hidden = commits.length === 0;
     if (!commits.length) {
-      setText("#gbw-empty", "这个分支还没有可显示的提交。");
+      setText("#gbw-empty", "这个仓库还没有可显示的提交。");
       return;
     }
 
@@ -1879,6 +2012,8 @@
     root.dataset.view = "workbench";
     $("#gbw-home").hidden = true;
     state.snapshot = snapshot;
+    state.watchRepoRoot = snapshot.repoRoot;
+    state.watchSignature = typeof snapshot.watchSignature === "string" ? snapshot.watchSignature : null;
     state.projectsRootPath = typeof snapshot.projectsRootPath === "string" ? snapshot.projectsRootPath : "";
     renderRepositoryOptions($("#gbw-repository"), snapshot.repositories, snapshot.repoRoot);
     setText("#gbw-title", snapshot.repoName || "Git Branch Workbench");
@@ -1909,8 +2044,8 @@
     setText("#gbw-remote-count", formatNumber(remoteBranches.length));
     setText("#gbw-tag-count", formatNumber(tags.length));
     setText("#gbw-worktree-count", formatNumber(worktrees.length));
-    setText("#gbw-history-heading", snapshot.selectedRef || snapshot.currentBranch || "HEAD");
-    setText("#gbw-ref-type", snapshot.selectedRefType === "remote" ? "远端" : snapshot.selectedRefType === "tag" ? "标签" : snapshot.selectedRefType === "detached" ? "HEAD" : "本地");
+    setText("#gbw-history-heading", "全部提交");
+    setText("#gbw-ref-type", "历史");
     setText("#gbw-commit-count", `${formatNumber(snapshot.commits.length)} 条提交`);
 
     renderBranchList(localBranches, "local");
@@ -1924,10 +2059,13 @@
     persistWidgetState();
     scheduleIntrinsicHeightReport(true);
     document.fonts?.ready.then(() => scheduleIntrinsicHeightReport(true));
+    void pollGitWatch();
   }
 
   function renderHome(home = {}) {
     state.snapshot = null;
+    state.watchRepoRoot = "";
+    state.watchSignature = null;
     state.projectsRootPath = typeof home.projectsRootPath === "string" ? home.projectsRootPath : "";
     root.dataset.view = "home";
     $("#gbw-home").hidden = false;
@@ -1975,7 +2113,8 @@
       return;
     }
     if (message.method === "ui/notifications/tool-result") {
-      render(message.params?.structuredContent || message.params?.result?.structuredContent);
+      const snapshot = message.params?.structuredContent || message.params?.result?.structuredContent;
+      if (isRenderableSnapshot(snapshot)) render(snapshot);
     }
     if (message.method === "ui/notifications/host-context-changed") applyHostContext(message.params);
   }, { passive: true });
@@ -2149,11 +2288,20 @@
     scheduleIntrinsicHeightReport();
   }, { passive: true });
 
+  window.addEventListener("focus", () => { void pollGitWatch(); }, { passive: true });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") void pollGitWatch();
+  }, { passive: true });
+  window.addEventListener("beforeunload", () => {
+    if (state.monitorTimer !== null) window.clearInterval(state.monitorTimer);
+  }, { passive: true });
+
   initializeSidebarResizer();
   initializeColumnResizers();
   applyColumnWidths();
   applyHostContext(window.openai?.hostContext || { theme: window.openai?.theme, styles: window.openai?.styles });
   applyDisplayMode(window.openai?.displayMode || "inline");
+  state.monitorTimer = window.setInterval(() => { void pollGitWatch(); }, gitWatchIntervalMs);
   if (window.openai?.toolOutput) render(window.openai.toolOutput);
 })();
 </script>
