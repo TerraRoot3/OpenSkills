@@ -2,7 +2,27 @@
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#11151c">
 
-<div id="git-branch-workbench" data-display-mode="inline">
+<div id="git-branch-workbench" data-display-mode="inline" data-view="workbench">
+  <section id="gbw-home" class="gbw-home" aria-labelledby="gbw-home-title" hidden>
+    <div class="gbw-home-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><path d="M5 4.75h5.2l1.65 2H19a2 2 0 0 1 2 2v8.5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6.75a2 2 0 0 1 2-2Z"/><path d="M8 13h8M12 9v8"/></svg>
+    </div>
+    <div class="gbw-home-copy">
+      <h1 id="gbw-home-title">Git Branch Workbench</h1>
+      <p>选择本地 Git 项目；可保存一个项目总目录，并随时重新扫描。</p>
+    </div>
+    <form id="gbw-home-form" class="gbw-home-form">
+      <label for="gbw-home-repository">Git 项目</label>
+      <div class="gbw-home-control">
+        <select id="gbw-home-repository" name="repo_path" autocomplete="off" required></select>
+        <button id="gbw-home-refresh-projects" type="button" class="gbw-home-secondary" aria-label="刷新项目目录" title="刷新项目目录">刷新</button>
+        <button id="gbw-home-projects-root" type="button" class="gbw-home-secondary">项目目录</button>
+        <button type="submit">打开项目</button>
+      </div>
+      <p id="gbw-home-error" class="gbw-home-error" role="alert" hidden></p>
+    </form>
+  </section>
+
   <section class="gbw-inline-card" aria-labelledby="gbw-card-title">
     <div class="gbw-card-icon" aria-hidden="true">
       <svg viewBox="0 0 24 24"><path d="M5 4.75h5.2l1.65 2H19a2 2 0 0 1 2 2v8.5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6.75a2 2 0 0 1 2-2Z"/></svg>
@@ -36,12 +56,17 @@
 
   <header class="gbw-toolbar">
     <div class="gbw-repo-block">
-      <div class="gbw-repo-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24"><path d="M5 4.75h5.2l1.65 2H19a2 2 0 0 1 2 2v8.5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6.75a2 2 0 0 1 2-2Z"/></svg>
-      </div>
       <div class="gbw-repo-copy">
         <div class="gbw-title-line">
-          <h1 id="gbw-title">Git Branch Workbench</h1>
+          <h1 id="gbw-title" class="gbw-visually-hidden">Git Branch Workbench</h1>
+          <label class="gbw-visually-hidden" for="gbw-repository">选择 Git 项目</label>
+          <select id="gbw-repository" class="gbw-repository-select" name="repository" autocomplete="off" aria-label="选择 Git 项目" translate="no"></select>
+          <button id="gbw-refresh" type="button" class="gbw-title-icon-button" aria-label="刷新项目、分支和提交" title="刷新项目、分支和提交">
+            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 6v5h-5M4 18v-5h5M18.4 9a7 7 0 0 0-11.7-2.6L4 9m16 6-2.7 2.6A7 7 0 0 1 5.6 15"/></svg>
+          </button>
+          <button id="gbw-projects-root" type="button" class="gbw-title-icon-button" aria-label="设置项目目录" title="设置项目目录">
+            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 7.5h7l2 2h9v8.5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7.5Z"/><path d="M3 7.5V6a2 2 0 0 1 2-2h5l2 2h5"/></svg>
+          </button>
           <span class="gbw-current-branch" title="当前工作区分支">
             <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2.2"/><circle cx="6" cy="19" r="2.2"/><circle cx="18" cy="7" r="2.2"/><path d="M6 7.2v9.6M8.2 15.5c5.6 0 9.8-2.6 9.8-6.3"/></svg>
             <strong id="gbw-current">—</strong>
@@ -54,9 +79,6 @@
     </div>
 
     <div class="gbw-toolbar-actions" aria-label="Git 操作">
-      <button id="gbw-refresh" type="button" class="gbw-icon-button" aria-label="刷新分支和提交" title="刷新分支和提交">
-        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 6v5h-5M4 18v-5h5M18.4 9a7 7 0 0 0-11.7-2.6L4 9m16 6-2.7 2.6A7 7 0 0 1 5.6 15"/></svg>
-      </button>
       <button id="gbw-new-branch" type="button" class="gbw-action gbw-secondary-action">
         <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><path d="M6 7v10M14 6v8M10 10h8"/></svg>
         新建分支
@@ -74,9 +96,6 @@
         <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 20V8M7.5 12.5 12 8l4.5 4.5M5 4h14"/></svg>
         推送
         <span id="gbw-push-count" class="gbw-action-count" hidden></span>
-      </button>
-      <button id="gbw-fullscreen" type="button" class="gbw-icon-button" aria-label="全屏打开" title="全屏打开">
-        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg>
       </button>
     </div>
   </header>
@@ -194,6 +213,26 @@
 
   <div id="gbw-notice" class="gbw-notice" role="status" aria-live="polite" hidden></div>
 
+  <dialog id="gbw-projects-root-dialog" class="gbw-form-dialog" aria-labelledby="gbw-projects-root-title">
+    <form id="gbw-projects-root-form">
+      <div class="gbw-form-dialog-header">
+        <h2 id="gbw-projects-root-title">项目目录</h2>
+        <p>保存一个包含 Git 项目的总目录；刷新时扫描其 3 级子目录。</p>
+      </div>
+      <div class="gbw-projects-root-field">
+        <label for="gbw-projects-root-input">目录绝对路径</label>
+        <div>
+          <input id="gbw-projects-root-input" name="projects_root" type="text" autocomplete="off" spellcheck="false" placeholder="例如 /Users/name/workspace" required>
+          <button id="gbw-projects-root-choose" type="button">浏览…</button>
+        </div>
+      </div>
+      <div class="gbw-form-actions">
+        <button id="gbw-projects-root-cancel" type="button">取消</button>
+        <button type="submit" class="gbw-primary-button">保存并扫描</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="gbw-create-branch" class="gbw-form-dialog" aria-labelledby="gbw-create-branch-title">
     <form id="gbw-create-branch-form">
       <div class="gbw-form-dialog-header">
@@ -310,12 +349,35 @@
   #git-branch-workbench svg:not(.gbw-graph) { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
   #git-branch-workbench button { touch-action: manipulation; }
   #git-branch-workbench button:focus-visible,
-  #git-branch-workbench a:focus-visible { outline: 2px solid var(--gbw-blue); outline-offset: 2px; }
+  #git-branch-workbench a:focus-visible,
+  #git-branch-workbench select:focus-visible { outline: 2px solid var(--gbw-blue); outline-offset: 2px; }
+  .gbw-visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important; white-space: nowrap !important; border: 0 !important; }
 
   #git-branch-workbench[data-display-mode="inline"] { height: auto; min-height: 0; display: block; overflow: visible; background: transparent; }
   #git-branch-workbench[data-display-mode="inline"] > :not(.gbw-inline-card) { display: none !important; }
   .gbw-inline-card { display: none; }
   #git-branch-workbench[data-display-mode="inline"] .gbw-inline-card { min-width: 0; height: 198px; min-height: 198px; padding: 9px 10px; display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; grid-template-rows: 39px minmax(0, 1fr); align-items: center; column-gap: 9px; row-gap: 8px; border: 1px solid var(--gbw-border); border-radius: var(--gbw-radius); color: var(--gbw-text); background: var(--gbw-surface); box-shadow: 0 1px 2px rgb(0 0 0 / .05); }
+  #git-branch-workbench[data-view="home"] { display: grid; grid-template-rows: minmax(0, 1fr); }
+  #git-branch-workbench[data-view="home"] > :not(.gbw-home) { display: none !important; }
+  #git-branch-workbench[data-view="home"] > .gbw-home { display: grid !important; }
+  #git-branch-workbench[data-view="home"][data-display-mode="inline"] { min-height: 198px; border: 1px solid var(--gbw-border); border-radius: var(--gbw-radius); background: var(--gbw-surface); }
+  #git-branch-workbench[data-view="home"][data-display-mode="inline"] > .gbw-inline-card { display: none !important; }
+  #git-branch-workbench[data-view="home"][data-display-mode="inline"] > .gbw-home { min-height: 198px; display: grid !important; }
+  .gbw-home { width: min(560px, calc(100% - 32px)); margin: auto; padding: 28px; grid-template-columns: 42px minmax(0, 1fr); align-content: center; gap: 0 14px; }
+  .gbw-home-icon { width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid var(--gbw-border); border-radius: var(--gbw-radius); color: var(--gbw-blue); background: var(--gbw-blue-soft); }
+  .gbw-home-icon svg { width: 22px !important; height: 22px !important; }
+  .gbw-home-copy { min-width: 0; }
+  #git-branch-workbench .gbw-home-copy h1 { margin: 0; font-size: 17px; line-height: 1.3; font-weight: 680; }
+  .gbw-home-copy p { margin: 5px 0 0; color: var(--gbw-muted); font-size: 11px; line-height: 1.5; }
+  .gbw-home-form { grid-column: 1 / -1; margin-top: 20px; }
+  .gbw-home-form label { display: block; margin-bottom: 6px; color: var(--gbw-muted); font-size: 10px; font-weight: 620; }
+  .gbw-home-control { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 7px; }
+  #git-branch-workbench .gbw-home-control select { min-width: 0; height: 34px; padding: 0 10px; border: 1px solid var(--gbw-border-strong); border-radius: var(--gbw-radius-sm); color: var(--gbw-text); background-color: var(--gbw-surface); font: 11px/1.3 inherit; }
+  #git-branch-workbench .gbw-home-control button { height: 34px; padding: 0 13px; border: 1px solid var(--gbw-blue); border-radius: var(--gbw-radius-sm); color: var(--color-text-inverse, #fff); background: var(--gbw-blue); cursor: pointer; font: 620 11px/1 inherit; }
+  #git-branch-workbench .gbw-home-control .gbw-home-secondary { border-color: var(--gbw-border-strong); color: var(--gbw-text); background: var(--gbw-surface-raised); }
+  #git-branch-workbench .gbw-home-control .gbw-home-secondary:hover:not(:disabled) { border-color: var(--gbw-blue); background: var(--gbw-surface-hover); }
+  #git-branch-workbench .gbw-home-control button:disabled { opacity: .5; cursor: wait; }
+  .gbw-home-error { margin: 8px 0 0; color: var(--gbw-red); font-size: 10px; line-height: 1.45; overflow-wrap: anywhere; }
   .gbw-card-icon { width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid var(--gbw-border); border-radius: var(--gbw-radius-sm); color: var(--gbw-blue); background: var(--gbw-blue-soft); }
   .gbw-card-icon svg { width: 17px; height: 17px; }
   .gbw-card-copy { min-width: 0; }
@@ -350,29 +412,34 @@
   .gbw-skip { position: fixed; z-index: 50; left: 12px; top: 8px; padding: 8px 12px; border-radius: 7px; color: #fff; background: #1f5fd1; transform: translateY(-160%); transition: transform 120ms ease; }
   .gbw-skip:focus-visible { transform: translateY(0); }
 
-  .gbw-toolbar { min-height: 58px; padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; gap: 14px; border-bottom: 1px solid var(--gbw-border); background: var(--gbw-surface); }
-  .gbw-repo-block { display: flex; align-items: center; gap: 9px; min-width: 0; }
-  .gbw-repo-icon { width: 31px; height: 31px; flex: none; display: grid; place-items: center; border: 1px solid var(--gbw-border); border-radius: var(--gbw-radius-sm); color: var(--gbw-blue); background: var(--gbw-blue-soft); }
-  .gbw-repo-icon svg { width: 17px; height: 17px; }
-  .gbw-repo-copy { min-width: 0; }
-  .gbw-title-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .gbw-toolbar { min-width: 0; min-height: 58px; padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; gap: 14px; overflow: hidden; border-bottom: 1px solid var(--gbw-border); background: var(--gbw-surface); }
+  .gbw-repo-block { min-width: 0; flex: 1 1 0; display: flex; align-items: center; overflow: hidden; }
+  .gbw-repo-copy { min-width: 0; flex: 1 1 auto; overflow: hidden; }
+  .gbw-title-line { min-width: 0; display: flex; align-items: center; gap: 8px; overflow: hidden; }
   #git-branch-workbench h1 { margin: 0; max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; line-height: 1.25; font-weight: 650; text-wrap: balance; }
-  .gbw-current-branch { min-width: 0; display: inline-flex; align-items: center; gap: 5px; color: var(--gbw-muted); }
-  .gbw-current-branch svg { width: 15px; height: 15px; }
-  .gbw-current-branch strong { max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--gbw-text); font: 650 12px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  #git-branch-workbench .gbw-repository-select { width: clamp(130px, 18vw, 240px); min-width: 0; height: 30px; flex: 0 1 240px; padding: 0 28px 0 9px; border: 1px solid var(--gbw-border-strong); border-radius: var(--gbw-radius-sm); overflow: hidden; text-overflow: ellipsis; color: var(--gbw-text); background-color: var(--gbw-surface-raised); cursor: pointer; font: 650 12px/1.25 inherit; }
+  #git-branch-workbench .gbw-repository-select:hover:not(:disabled) { border-color: var(--gbw-blue); background-color: var(--gbw-surface-hover); }
+  #git-branch-workbench .gbw-repository-select:focus-visible { outline: none; border-color: var(--gbw-border-strong); box-shadow: inset 0 0 0 1px var(--gbw-muted); }
+  #git-branch-workbench :is(.gbw-repository-select, #gbw-home-repository):disabled { opacity: .55; cursor: not-allowed; }
+  #git-branch-workbench[aria-busy="true"] :is(.gbw-repository-select, #gbw-home-repository):disabled { cursor: progress; }
+  #git-branch-workbench .gbw-title-icon-button { width: 27px; height: 27px; flex: none; padding: 0; display: grid; place-items: center; border: 1px solid var(--gbw-border-strong); border-radius: var(--gbw-radius-sm); color: var(--gbw-muted); background: var(--gbw-surface-raised); cursor: pointer; }
+  #git-branch-workbench .gbw-title-icon-button:hover:not(:disabled) { border-color: var(--gbw-blue); color: var(--gbw-blue); background: var(--gbw-surface-hover); }
+  #git-branch-workbench .gbw-title-icon-button:disabled { opacity: .45; cursor: wait; }
+  #git-branch-workbench .gbw-title-icon-button svg { width: 14px; height: 14px; }
+  .gbw-current-branch { min-width: 0; flex: 1 1 100px; display: inline-flex; align-items: center; gap: 5px; overflow: hidden; color: var(--gbw-muted); }
+  .gbw-current-branch svg { width: 15px; height: 15px; flex: none; }
+  .gbw-current-branch strong { min-width: 0; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--gbw-text); font: 650 12px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; }
   .gbw-worktree-state, .gbw-sync-state { flex: none; padding: 1px 5px; border-radius: 999px; color: var(--gbw-muted); background: var(--gbw-surface-soft); font-size: 9px; line-height: 1.45; font-variant-numeric: tabular-nums; }
   .gbw-worktree-state.is-dirty { color: var(--gbw-amber); background: var(--gbw-amber-soft); }
   .gbw-sync-state { color: var(--gbw-green); }
-  .gbw-path { max-width: min(650px, 56vw); margin: 2px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--gbw-faint); font: 10px/1.25 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .gbw-path { width: 100%; max-width: 650px; margin: 2px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--gbw-faint); font: 10px/1.25 ui-monospace, SFMono-Regular, Menlo, monospace; }
 
-  .gbw-toolbar-actions { display: flex; align-items: center; gap: 5px; flex: none; }
+  .gbw-toolbar-actions { flex: 0 0 auto; display: flex; align-items: center; gap: 5px; }
   #git-branch-workbench .gbw-toolbar-actions button { height: 30px; border: 1px solid var(--gbw-border-strong); border-radius: var(--gbw-radius-sm); color: var(--gbw-text); background: var(--gbw-surface-raised); cursor: pointer; font: 620 12px/1 inherit; transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease, transform 120ms ease; }
   #git-branch-workbench .gbw-toolbar-actions button:hover:not(:disabled) { border-color: var(--gbw-blue); background: var(--gbw-surface-hover); }
   #git-branch-workbench .gbw-toolbar-actions button:active:not(:disabled) { transform: translateY(1px); }
   #git-branch-workbench .gbw-toolbar-actions button:disabled { opacity: .45; cursor: not-allowed; }
-  #git-branch-workbench .gbw-icon-button { width: 30px; padding: 0; display: grid; place-items: center; }
-  #git-branch-workbench .gbw-icon-button svg { width: 16px; height: 16px; }
-  #git-branch-workbench .gbw-action { min-width: 67px; padding: 0 9px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+  #git-branch-workbench .gbw-action { min-width: 67px; padding: 0 9px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; white-space: nowrap; }
   #git-branch-workbench .gbw-action svg { width: 15px; height: 15px; }
   #git-branch-workbench .gbw-pull { color: var(--gbw-amber); border-color: color-mix(in srgb, var(--gbw-amber) 38%, var(--gbw-border)); background: var(--gbw-amber-soft); }
   #git-branch-workbench .gbw-push { color: var(--gbw-blue); border-color: color-mix(in srgb, var(--gbw-blue) 38%, var(--gbw-border)); background: var(--gbw-blue-soft); }
@@ -475,13 +542,13 @@
   .gbw-code { color: var(--gbw-faint); font: 10px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; }
   .gbw-author { color: var(--gbw-muted); }
 
-  .gbw-detail { min-height: 124px; flex: 0 0 auto; padding: 6px 12px 7px; overflow: visible; border-top: 1px solid var(--gbw-border-strong); background: var(--gbw-surface-soft); }
+  .gbw-detail { min-height: 86px; flex: 0 0 auto; padding: 7px 12px 8px; overflow: visible; border-top: 1px solid var(--gbw-border-strong); background: var(--gbw-surface-soft); }
   .gbw-detail-title { display: flex; align-items: center; gap: 14px; }
-  .gbw-detail-title h3 { color: var(--gbw-muted); }
-  .gbw-detail-message { min-width: 0; margin: 3px 0 5px; display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 7px; }
+  .gbw-detail-title h3 { margin: 0; color: var(--gbw-muted); font-size: 12px; line-height: 1.3; font-weight: 680; }
+  .gbw-detail-message { min-width: 0; margin: 5px 0 6px; display: grid; grid-template-columns: 48px minmax(0, 1fr); align-items: baseline; gap: 7px; }
   .gbw-detail-message > span { color: var(--gbw-faint); font-size: 11px; }
   .gbw-detail-subject { min-width: 0; margin: 0; color: var(--gbw-text); font-size: 13px; font-weight: 650; line-height: 1.4; overflow-wrap: anywhere; white-space: pre-wrap; }
-  .gbw-detail-meta { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 18px; color: var(--gbw-muted); font-size: 10px; }
+  .gbw-detail-meta { margin: 0; display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, .65fr); gap: 4px 22px; color: var(--gbw-muted); font-size: 10px; }
   .gbw-detail-meta div { min-width: 0; display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 7px; }
   .gbw-detail-meta dt { color: var(--gbw-faint); }
   .gbw-detail-meta dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
@@ -499,6 +566,12 @@
   .gbw-form-dialog form { padding: 16px; }
   .gbw-form-dialog-header h2 { font-size: 14px; }
   .gbw-form-dialog-header p { margin: 5px 0 0; color: var(--gbw-muted); font-size: 10px; line-height: 1.45; }
+  .gbw-projects-root-field { margin-top: 14px; }
+  .gbw-projects-root-field > label { display: block; margin-bottom: 6px; color: var(--gbw-muted); font-size: 10px; }
+  .gbw-projects-root-field > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; }
+  #git-branch-workbench .gbw-projects-root-field input { width: 100%; min-width: 0; height: 31px; padding: 0 9px; border: 1px solid var(--gbw-border-strong); border-radius: var(--gbw-radius-sm); color: var(--gbw-text); background: var(--gbw-surface); font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  #git-branch-workbench .gbw-projects-root-field button { height: 31px; padding: 0 10px; border: 1px solid var(--gbw-border-strong); border-radius: var(--gbw-radius-sm); color: var(--gbw-text); background: var(--gbw-surface-raised); cursor: pointer; font: 620 11px/1 inherit; }
+  #git-branch-workbench .gbw-projects-root-field :is(input, button):focus-visible { outline: 2px solid var(--gbw-blue); outline-offset: 1px; }
   .gbw-form-fields { margin-top: 14px; display: grid; grid-template-columns: 112px minmax(0, 1fr); align-items: center; gap: 9px 10px; }
   .gbw-form-fields label { color: var(--gbw-muted); font-size: 10px; }
   #git-branch-workbench .gbw-form-fields :is(input, select, textarea) { width: 100%; min-width: 0; border: 1px solid var(--gbw-border-strong); border-radius: var(--gbw-radius-sm); color: var(--gbw-text); background: var(--gbw-surface); font: 11px/1.4 inherit; }
@@ -534,11 +607,21 @@
     .gbw-form-fields textarea { grid-column: 1; }
   }
 
+  @media (max-width: 1100px) {
+    .gbw-toolbar { padding-inline: 8px; gap: 8px; }
+    .gbw-title-line { gap: 6px; }
+    #git-branch-workbench .gbw-repository-select { width: clamp(110px, 16vw, 190px); flex-basis: 190px; }
+    .gbw-toolbar-actions { gap: 4px; }
+    #git-branch-workbench .gbw-action { min-width: 62px; padding-inline: 7px; gap: 4px; }
+  }
+
   @media (max-width: 520px) {
     #git-branch-workbench[data-display-mode="inline"] .gbw-inline-card { height: 236px; min-height: 236px; grid-template-columns: 32px minmax(0, 1fr); grid-template-rows: 39px 30px minmax(0, 1fr); }
     #git-branch-workbench .gbw-card-open { grid-column: 1 / -1; width: 100%; justify-content: center; }
     .gbw-card-commit { grid-template-columns: 7px 55px minmax(0, 1fr) 78px; }
     .gbw-card-commit-author { display: none; }
+    .gbw-home-control { grid-template-columns: minmax(0, 1fr) auto; }
+    #git-branch-workbench .gbw-home-control select { grid-column: 1 / -1; }
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -570,6 +653,7 @@
   }
   const state = {
     snapshot: null,
+    projectsRootPath: "",
     selectedHash: typeof savedWidgetState.selectedHash === "string" ? savedWidgetState.selectedHash : null,
     expandedGroups: {
       local: savedWidgetState.expandedGroups?.local !== false,
@@ -670,7 +754,8 @@
       if (root.dataset.displayMode !== "inline") return;
       const shouldForce = state.forceIntrinsicHeightReport;
       state.forceIntrinsicHeightReport = false;
-      const height = Math.ceil($(".gbw-inline-card").getBoundingClientRect().height);
+      const surface = root.dataset.view === "home" ? $("#gbw-home") : $(".gbw-inline-card");
+      const height = Math.ceil(surface.getBoundingClientRect().height);
       if (!Number.isFinite(height) || height <= 0 || (!shouldForce && height === state.lastIntrinsicHeight)) return;
       state.lastIntrinsicHeight = height;
       document.documentElement.style.height = `${height}px`;
@@ -789,6 +874,10 @@
     for (const button of root.querySelectorAll("button")) {
       if (!button.closest("dialog")) button.disabled = busy || button.dataset.disabled === "true";
     }
+    const repositorySelect = $("#gbw-repository");
+    repositorySelect.disabled = busy || repositorySelect.options.length === 0;
+    const homeRepositorySelect = $("#gbw-home-repository");
+    homeRepositorySelect.disabled = busy || homeRepositorySelect.options.length === 0;
   }
 
   async function runTool(name, args, pendingMessage) {
@@ -944,7 +1033,7 @@
   function graphColumnWidth(commits) {
     const branchSpacing = 18;
     const leftMargin = 14;
-    const recentCommits = commits.slice(0, 10);
+    const recentCommits = commits.slice(0, 20);
     const maxColumn = recentCommits.reduce((max, commit) => Math.max(max, commit.__column || 0), 0);
     return Math.max(64, Math.min(180, Math.ceil((maxColumn + 1) * branchSpacing + leftMargin * 2 + 4)));
   }
@@ -1584,6 +1673,27 @@
     $("#gbw-branch-name").focus();
   }
 
+  function currentRepositoryToolArgs() {
+    if (!state.snapshot) return { limit: 200 };
+    return {
+      repoPath: state.snapshot.repoRoot,
+      ref: state.snapshot.selectedRef,
+      refType: state.snapshot.selectedRefType === "detached" ? undefined : state.snapshot.selectedRefType,
+      limit: state.snapshot.limit
+    };
+  }
+
+  function openProjectsRootDialog() {
+    const dialog = $("#gbw-projects-root-dialog");
+    $("#gbw-projects-root-input").value = state.projectsRootPath || "";
+    if (typeof dialog.showModal !== "function") {
+      showNotice("当前宿主不支持项目目录设置对话框。", "error");
+      return;
+    }
+    dialog.showModal();
+    $("#gbw-projects-root-input").focus();
+  }
+
   function openCreateMergeRequestDialog() {
     if (!state.snapshot || $("#gbw-new-mr").disabled) return;
     const dialog = $("#gbw-create-mr");
@@ -1762,8 +1872,15 @@
   }
 
   function render(snapshot) {
-    if (!snapshot || !Array.isArray(snapshot.commits)) return;
+    if (snapshot?.view === "home" || !Array.isArray(snapshot?.commits)) {
+      renderHome(snapshot || {});
+      return;
+    }
+    root.dataset.view = "workbench";
+    $("#gbw-home").hidden = true;
     state.snapshot = snapshot;
+    state.projectsRootPath = typeof snapshot.projectsRootPath === "string" ? snapshot.projectsRootPath : "";
+    renderRepositoryOptions($("#gbw-repository"), snapshot.repositories, snapshot.repoRoot);
     setText("#gbw-title", snapshot.repoName || "Git Branch Workbench");
     setText("#gbw-card-title", snapshot.repoName || "Git Branch Workbench");
     setText("#gbw-path", snapshot.repoRoot || "—");
@@ -1809,6 +1926,43 @@
     document.fonts?.ready.then(() => scheduleIntrinsicHeightReport(true));
   }
 
+  function renderHome(home = {}) {
+    state.snapshot = null;
+    state.projectsRootPath = typeof home.projectsRootPath === "string" ? home.projectsRootPath : "";
+    root.dataset.view = "home";
+    $("#gbw-home").hidden = false;
+    const repositories = Array.isArray(home.repositories) ? home.repositories : [];
+    renderRepositoryOptions($("#gbw-home-repository"), repositories, home.recentRepoPath);
+    const discoveredError = repositories.length ? "" : "没有发现可用的 Git 项目。请设置项目目录后刷新。";
+    const error = (typeof home.error === "string" ? home.error.trim() : "") || discoveredError;
+    $("#gbw-home-error").textContent = error;
+    $("#gbw-home-error").hidden = !error;
+    scheduleIntrinsicHeightReport(true);
+  }
+
+  function renderRepositoryOptions(select, repositories, selectedPath = "") {
+    const items = Array.isArray(repositories) ? repositories : [];
+    select.replaceChildren();
+    if (!items.length) {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "未发现 Git 项目";
+      select.appendChild(option);
+      select.disabled = true;
+      return;
+    }
+    for (const repository of items) {
+      if (!repository || typeof repository.path !== "string") continue;
+      const option = document.createElement("option");
+      option.value = repository.path;
+      option.textContent = repository.label || repository.name || repository.path;
+      option.title = repository.path;
+      option.selected = repository.path === selectedPath;
+      select.appendChild(option);
+    }
+    select.disabled = state.busy || select.options.length === 0;
+  }
+
   window.addEventListener("message", (event) => {
     if (event.source !== window.parent) return;
     const message = event.data;
@@ -1831,6 +1985,46 @@
     const resolve = state.confirmResolve;
     state.confirmResolve = null;
     resolve($("#gbw-confirm").returnValue === "confirm");
+  });
+
+  $("#gbw-home-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (state.busy) return;
+    const repoPath = $("#gbw-home-repository").value;
+    if (!repoPath) return;
+    $("#gbw-home-error").hidden = true;
+    await runTool("open_git_branch_workbench", { repoPath, limit: 200 }, "正在打开仓库…");
+  });
+
+  $("#gbw-repository").addEventListener("change", async (event) => {
+    if (!state.snapshot || state.busy) return;
+    const repoPath = event.currentTarget.value;
+    if (!repoPath || repoPath === state.snapshot.repoRoot) return;
+    await runTool("get_git_snapshot", { repoPath, limit: 200 }, "正在切换项目…");
+    if (state.snapshot) event.currentTarget.value = state.snapshot.repoRoot;
+  });
+
+  $("#gbw-projects-root").addEventListener("click", openProjectsRootDialog);
+  $("#gbw-home-projects-root").addEventListener("click", openProjectsRootDialog);
+  $("#gbw-projects-root-cancel").addEventListener("click", () => $("#gbw-projects-root-dialog").close());
+  $("#gbw-projects-root-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (state.busy) return;
+    const rootPath = $("#gbw-projects-root-input").value.trim();
+    if (!rootPath || !event.currentTarget.reportValidity()) return;
+    $("#gbw-projects-root-dialog").close();
+    void runTool("set_git_projects_root", {
+      ...currentRepositoryToolArgs(),
+      rootPath
+    }, "正在保存并扫描项目目录…");
+  });
+  $("#gbw-projects-root-choose").addEventListener("click", () => {
+    if (state.busy) return;
+    $("#gbw-projects-root-dialog").close();
+    void runTool("choose_git_projects_root", currentRepositoryToolArgs(), "正在打开目录选择器…");
+  });
+  $("#gbw-home-refresh-projects").addEventListener("click", () => {
+    void runTool("refresh_git_projects", { limit: 200 }, "正在刷新项目目录…");
   });
 
   for (const button of root.querySelectorAll("[data-group-toggle]")) {
@@ -1898,12 +2092,7 @@
 
   $("#gbw-refresh").addEventListener("click", () => {
     if (!state.snapshot) return;
-    void runTool("get_git_snapshot", {
-      repoPath: state.snapshot.repoRoot,
-      ref: state.snapshot.selectedRef,
-      refType: state.snapshot.selectedRefType === "detached" ? undefined : state.snapshot.selectedRefType,
-      limit: state.snapshot.limit
-    }, "正在刷新分支和提交…");
+    void runTool("refresh_git_projects", currentRepositoryToolArgs(), "正在刷新项目、分支和提交…");
   });
 
   $("#gbw-pull").addEventListener("click", async () => {
@@ -1924,15 +2113,6 @@
       confirmLabel: "确认推送"
     });
     if (approved) void runTool("push_current_branch", { repoPath: state.snapshot.repoRoot, limit: state.snapshot.limit }, "正在推送当前分支…");
-  });
-
-  $("#gbw-fullscreen").addEventListener("click", async () => {
-    try {
-      if (!window.openai?.requestDisplayMode) throw new Error("当前宿主未提供全屏接口；页面仍可在当前面板中使用。");
-      await window.openai.requestDisplayMode({ mode: "fullscreen" });
-    } catch (error) {
-      showNotice(error?.message || String(error), "error");
-    }
   });
 
   $("#gbw-open-workbench").addEventListener("click", async () => {
@@ -1960,6 +2140,7 @@
     graphObserver.observe($("#gbw-history"));
     const inlineCardObserver = new ResizeObserver(() => scheduleIntrinsicHeightReport());
     inlineCardObserver.observe($(".gbw-inline-card"));
+    inlineCardObserver.observe($("#gbw-home"));
   }
 
   window.addEventListener("resize", () => {

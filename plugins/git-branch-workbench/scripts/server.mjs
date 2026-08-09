@@ -1,19 +1,35 @@
 #!/usr/bin/env node
 
-import { basename, dirname, isAbsolute, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { readFileSync, realpathSync, statSync } from "node:fs";
+import { homedir } from "node:os";
+import { mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import readline from "node:readline";
 
 const SERVER_NAME = "git-branch-workbench";
-const SERVER_VERSION = "0.4.6";
-const TEMPLATE_URI = "ui://git-branch-workbench/v10.html";
+const SERVER_VERSION = "0.5.0";
+const TEMPLATE_URI = "ui://git-branch-workbench/v11.html";
 const DEFAULT_COMMIT_LIMIT = 200;
 const MAX_COMMIT_LIMIT = 200;
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const templatePath = resolve(scriptDir, "../assets/branch-workbench.html");
 const templateHtml = readFileSync(templatePath, "utf8");
+const codexDataRoot = process.env.CODEX_HOME || resolve(homedir(), ".codex");
+const stateDirectory = resolve(
+  process.env.GIT_BRANCH_WORKBENCH_STATE_DIR || resolve(codexDataRoot, "plugin-data", SERVER_NAME)
+);
+const recentRepositoryPath = resolve(stateDirectory, "recent-repository.json");
+const codexGlobalStatePath = resolve(codexDataRoot, ".codex-global-state.json");
+const MAX_RECENT_REPOSITORIES = 24;
+const MAX_DISCOVERY_CANDIDATES = 200;
+const MAX_SCANNED_DIRECTORIES = 5_000;
+const MAX_PROJECT_SCAN_DEPTH = 3;
+const REPOSITORY_DISCOVERY_TTL_MS = 30_000;
+const IGNORED_PROJECT_DIRECTORY_NAMES = new Set([
+  ".git", "node_modules", "dist", "build", ".next", ".nuxt", ".output", "DerivedData", "Pods"
+]);
+let repositoryDiscoveryCache = { expiresAt: 0, sourceKey: "", repositories: [] };
 
 const repoPathProperty = {
   type: "string",
@@ -45,6 +61,116 @@ const widgetMeta = {
 
 const toolDefinitions = [
   {
+    name: "open_git_branch_workbench_home",
+    title: "Git Branch Workbench",
+    description: "Open Git Branch Workbench with the most recently accessed valid repository, or show a selector populated from the saved projects directory and local Git projects already known to Codex.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {}
+    },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false
+    },
+    _meta: {
+      ...widgetMeta,
+      ui: {
+        resourceUri: TEMPLATE_URI,
+        visibility: ["app", "model"]
+      },
+      "openai/ui": {
+        entrypoints: [{ type: "global" }, { type: "thread" }],
+        preferredModelDisplayMode: "fullscreen"
+      },
+      "openai/outputTemplate": TEMPLATE_URI,
+      "openai/toolInvocation/invoking": "Opening Git Branch Workbench…",
+      "openai/toolInvocation/invoked": "Git Branch Workbench opened."
+    }
+  },
+  {
+    name: "set_git_projects_root",
+    title: "Set Git Projects Directory",
+    description: "Save one local projects directory and discover Git repositories within three child-directory levels. Optionally return to the repository currently open in the workbench.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        rootPath: {
+          type: "string",
+          description: "Absolute local directory containing Git repositories."
+        },
+        repoPath: repoPathProperty,
+        ...refProperties,
+        limit: limitProperty
+      },
+      required: ["rootPath"]
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false
+    },
+    _meta: {
+      ...widgetMeta,
+      "openai/toolInvocation/invoking": "Saving projects directory…",
+      "openai/toolInvocation/invoked": "Projects directory saved."
+    }
+  },
+  {
+    name: "choose_git_projects_root",
+    title: "Choose Git Projects Directory",
+    description: "Open the native macOS directory chooser, save the selected projects directory, and discover Git repositories within three child-directory levels. Other platforms can use Set Git Projects Directory with an absolute path.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        repoPath: repoPathProperty,
+        ...refProperties,
+        limit: limitProperty
+      }
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false
+    },
+    _meta: {
+      ...widgetMeta,
+      "openai/toolInvocation/invoking": "Choosing projects directory…",
+      "openai/toolInvocation/invoked": "Projects directory selected."
+    }
+  },
+  {
+    name: "refresh_git_projects",
+    title: "Refresh Git Projects",
+    description: "Rescan the saved projects directory and refresh the current repository snapshot without checking out a branch or changing repository files.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        repoPath: repoPathProperty,
+        ...refProperties,
+        limit: limitProperty
+      }
+    },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false
+    },
+    _meta: {
+      ...widgetMeta,
+      "openai/toolInvocation/invoking": "Refreshing local Git projects…",
+      "openai/toolInvocation/invoked": "Local Git projects refreshed."
+    }
+  },
+  {
     name: "get_git_snapshot",
     title: "Get Git Repository Snapshot",
     description: "Read local and remote branches, tags, worktrees, hosting metadata, and up to 200 commits for one validated ref.",
@@ -73,7 +199,7 @@ const toolDefinitions = [
   {
     name: "open_git_branch_workbench",
     title: "Open Git Branch Workbench",
-    description: "Open a compact repository card that expands into an interactive Git workbench with local and remote branches, tags, worktrees, up to 200 commits, branch creation, MR/PR creation, and safe pull/push controls.",
+    description: "Open the current conversation repository as a compact card that expands into a multi-project Git workbench with a local repository selector, branches, tags, worktrees, up to 200 commits, branch creation, MR/PR creation, and safe pull/push controls.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -286,6 +412,205 @@ function resolveRepoRoot(repoPath) {
   const rootOutput = runGit(candidate, ["rev-parse", "--show-toplevel"]).stdout.trim();
   if (!rootOutput) throw new Error("The selected folder is not a Git repository.");
   return realpathSync(rootOutput);
+}
+
+function readRecentRepositoryState() {
+  try {
+    const state = JSON.parse(readFileSync(recentRepositoryPath, "utf8"));
+    const repoPath = typeof state.repoPath === "string" ? state.repoPath.trim() : "";
+    const projectsRootPath = typeof state.projectsRootPath === "string" ? state.projectsRootPath.trim() : "";
+    const repoPaths = Array.isArray(state.repoPaths)
+      ? state.repoPaths.filter((value) => typeof value === "string" && value.trim()).map((value) => value.trim())
+      : [];
+    return {
+      repoPath,
+      projectsRootPath,
+      repoPaths: [...new Set([repoPath, ...repoPaths].filter(Boolean))]
+    };
+  } catch {
+    return { repoPath: "", projectsRootPath: "", repoPaths: [] };
+  }
+}
+
+function writeRecentRepositoryState(state) {
+  try {
+    mkdirSync(stateDirectory, { recursive: true, mode: 0o700 });
+    const temporaryPath = resolve(stateDirectory, `recent-repository.${process.pid}.tmp`);
+    writeFileSync(
+      temporaryPath,
+      `${JSON.stringify({ ...state, updatedAt: new Date().toISOString() }, null, 2)}\n`,
+      { encoding: "utf8", mode: 0o600 }
+    );
+    renameSync(temporaryPath, recentRepositoryPath);
+    return true;
+  } catch {
+    // Repository access remains usable even if best-effort recent state cannot be persisted.
+    return false;
+  }
+}
+
+function rememberRecentRepository(repoRoot) {
+  const previous = readRecentRepositoryState();
+  const repoPaths = [repoRoot, ...previous.repoPaths.filter((value) => value !== repoRoot)]
+    .slice(0, MAX_RECENT_REPOSITORIES);
+  writeRecentRepositoryState({
+    repoPath: repoRoot,
+    repoPaths,
+    projectsRootPath: previous.projectsRootPath
+  });
+}
+
+function rememberProjectsRoot(projectsRootPath) {
+  const previous = readRecentRepositoryState();
+  writeRecentRepositoryState({
+    repoPath: previous.repoPath,
+    repoPaths: previous.repoPaths,
+    projectsRootPath
+  });
+}
+
+function collectCodexRepositoryCandidates() {
+  const candidates = [...readRecentRepositoryState().repoPaths];
+  try {
+    const state = JSON.parse(readFileSync(codexGlobalStatePath, "utf8"));
+    const addStrings = (value) => {
+      if (typeof value === "string") {
+        if (value.trim()) candidates.push(value.trim());
+        return;
+      }
+      if (Array.isArray(value)) {
+        for (const item of value) addStrings(item);
+      }
+    };
+
+    addStrings(state["active-workspace-roots"]);
+    addStrings(state["electron-saved-workspace-roots"]);
+    addStrings(Object.values(state["thread-workspace-root-hints"] || {}));
+    for (const project of Object.values(state["local-projects"] || {})) {
+      addStrings(project?.rootPaths);
+      addStrings(project?.rootPath);
+    }
+  } catch {
+    // Recent repositories still provide a useful selector when Codex state is unavailable.
+  }
+  return [...new Set(candidates)].slice(0, MAX_DISCOVERY_CANDIDATES);
+}
+
+function resolveProjectsRoot(rootPath) {
+  if (typeof rootPath !== "string" || !rootPath.trim()) {
+    throw new Error("项目目录不能为空。");
+  }
+  if (!isAbsolute(rootPath)) {
+    throw new Error("项目目录必须使用绝对路径。");
+  }
+  const candidate = realpathSync(rootPath.trim());
+  if (!statSync(candidate).isDirectory()) {
+    throw new Error("项目目录必须指向一个文件夹。");
+  }
+  return candidate;
+}
+
+function hasGitMarker(directoryPath) {
+  try {
+    const marker = statSync(join(directoryPath, ".git"));
+    return marker.isDirectory() || marker.isFile();
+  } catch {
+    return false;
+  }
+}
+
+function scanProjectsRoot(rootPath) {
+  const resolvedRoot = resolveProjectsRoot(rootPath);
+  const repositories = new Set();
+  let scannedDirectories = 0;
+
+  if (hasGitMarker(resolvedRoot)) repositories.add(resolvedRoot);
+
+  const walk = (directoryPath, depth) => {
+    if (depth > MAX_PROJECT_SCAN_DEPTH || repositories.size >= MAX_DISCOVERY_CANDIDATES) return;
+    if (scannedDirectories >= MAX_SCANNED_DIRECTORIES) return;
+    scannedDirectories += 1;
+
+    let entries = [];
+    try {
+      entries = readdirSync(directoryPath, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      if (repositories.size >= MAX_DISCOVERY_CANDIDATES || scannedDirectories >= MAX_SCANNED_DIRECTORIES) break;
+      if (!entry.isDirectory() || entry.name.startsWith(".") || IGNORED_PROJECT_DIRECTORY_NAMES.has(entry.name)) continue;
+      const childPath = join(directoryPath, entry.name);
+      if (hasGitMarker(childPath)) {
+        try {
+          repositories.add(realpathSync(childPath));
+        } catch {
+          // Ignore directories that disappeared while scanning.
+        }
+      }
+      if (depth < MAX_PROJECT_SCAN_DEPTH) walk(childPath, depth + 1);
+    }
+  };
+
+  walk(resolvedRoot, 1);
+  return { projectsRootPath: resolvedRoot, repositories: [...repositories] };
+}
+
+function repositoryLabel(repoRoot, duplicateNames) {
+  const name = basename(repoRoot);
+  return duplicateNames.has(name) ? `${name} — ${basename(dirname(repoRoot))}` : name;
+}
+
+function discoverRepositories(currentRepoRoot = "", { forceRefresh = false } = {}) {
+  const now = Date.now();
+  const state = readRecentRepositoryState();
+  const projectsRootPath = state.projectsRootPath;
+  const sourceKey = projectsRootPath ? `projects-root:${projectsRootPath}` : "codex-workspaces";
+  let repoRoots;
+  if (!forceRefresh && repositoryDiscoveryCache.sourceKey === sourceKey && repositoryDiscoveryCache.expiresAt > now) {
+    repoRoots = repositoryDiscoveryCache.repositories.map((repository) => repository.path);
+  } else {
+    const discovered = new Set();
+    if (projectsRootPath) {
+      try {
+        for (const repository of scanProjectsRoot(projectsRootPath).repositories) discovered.add(repository);
+      } catch {
+        // Keep the current repository usable if a saved projects directory moved or was removed.
+      }
+    } else {
+      for (const candidate of collectCodexRepositoryCandidates()) {
+        try {
+          discovered.add(resolveRepoRoot(candidate));
+        } catch {
+          // Ignore stale, missing, and non-Git Codex project roots.
+        }
+      }
+    }
+    repoRoots = [...discovered];
+    repositoryDiscoveryCache = {
+      expiresAt: now + REPOSITORY_DISCOVERY_TTL_MS,
+      sourceKey,
+      repositories: repoRoots.map((path) => ({ path }))
+    };
+  }
+
+  if (currentRepoRoot && !repoRoots.includes(currentRepoRoot)) repoRoots.push(currentRepoRoot);
+  const nameCounts = new Map();
+  for (const repoRoot of repoRoots) {
+    const name = basename(repoRoot);
+    nameCounts.set(name, (nameCounts.get(name) || 0) + 1);
+  }
+  const duplicateNames = new Set([...nameCounts].filter(([, count]) => count > 1).map(([name]) => name));
+  const repositories = repoRoots
+    .map((path) => ({
+      name: basename(path),
+      label: repositoryLabel(path, duplicateNames),
+      path,
+      current: path === currentRepoRoot
+    }))
+    .sort((left, right) => left.label.localeCompare(right.label) || left.path.localeCompare(right.path));
+  return repositories;
 }
 
 function normalizeLimit(value) {
@@ -583,8 +908,8 @@ function getSnapshot(input = {}, operation = null) {
   const worktreeResult = runGit(repoRoot, ["worktree", "list", "--porcelain"], { allowFailure: true });
   const hosting = getHostingInfo(repoRoot, refs, status);
 
-  return {
-    schemaVersion: 4,
+  const snapshot = {
+    schemaVersion: 5,
     generatedAt: new Date().toISOString(),
     repoRoot,
     repoName: basename(repoRoot),
@@ -601,12 +926,16 @@ function getSnapshot(input = {}, operation = null) {
     worktrees: worktreeResult.ok
       ? parseWorktrees(worktreeResult.stdout).map((worktree) => ({ ...worktree, current: worktree.path === repoRoot }))
       : [],
+    repositories: discoverRepositories(repoRoot),
+    projectsRootPath: readRecentRepositoryState().projectsRootPath,
     hosting,
     mergeTargets: hosting.mergeTargets,
     suggestedBaseBranch: hosting.suggestedBaseBranch,
     limit,
     operation
   };
+  rememberRecentRepository(repoRoot);
+  return snapshot;
 }
 
 function ensureClean(repoRoot) {
@@ -822,8 +1151,105 @@ function pushCurrentBranch(input = {}) {
   );
 }
 
+function cacheScannedProjects(scan) {
+  repositoryDiscoveryCache = {
+    expiresAt: Date.now() + REPOSITORY_DISCOVERY_TTL_MS,
+    sourceKey: `projects-root:${scan.projectsRootPath}`,
+    repositories: scan.repositories.map((path) => ({ path }))
+  };
+}
+
+function currentWorkbenchData(input = {}, operation = null) {
+  const candidates = [input.repoPath, readRecentRepositoryState().repoPath]
+    .filter((value, index, values) => typeof value === "string" && value.trim() && values.indexOf(value) === index);
+  for (const repoPath of candidates) {
+    try {
+      const selectedRef = repoPath === input.repoPath
+        ? { ref: input.ref, refType: input.refType }
+        : {};
+      return getSnapshot({ repoPath, ...selectedRef, limit: normalizeLimit(input.limit) }, operation);
+    } catch {
+      // Fall through to another remembered repository or the home selector.
+    }
+  }
+
+  const repositories = discoverRepositories("", { forceRefresh: false });
+  if (repositories.length) {
+    return getSnapshot({ repoPath: repositories[0].path, limit: normalizeLimit(input.limit) }, operation);
+  }
+  return {
+    schemaVersion: 5,
+    view: "home",
+    recentRepoPath: "",
+    projectsRootPath: readRecentRepositoryState().projectsRootPath,
+    repositories,
+    error: "",
+    operation
+  };
+}
+
+function setProjectsRoot(input = {}) {
+  const scan = scanProjectsRoot(input.rootPath);
+  if (!scan.repositories.length) {
+    throw new Error(`在 ${scan.projectsRootPath} 的 ${MAX_PROJECT_SCAN_DEPTH} 级目录内没有发现 Git 仓库。`);
+  }
+  rememberProjectsRoot(scan.projectsRootPath);
+  cacheScannedProjects(scan);
+  return currentWorkbenchData(input, {
+    type: "setProjectsRoot",
+    ok: true,
+    message: `已保存项目目录，发现 ${scan.repositories.length} 个 Git 仓库`
+  });
+}
+
+function refreshProjects(input = {}) {
+  const projectsRootPath = readRecentRepositoryState().projectsRootPath;
+  if (!projectsRootPath) {
+    repositoryDiscoveryCache.expiresAt = 0;
+    return currentWorkbenchData(input, {
+      type: "refreshProjects",
+      ok: true,
+      message: "已刷新 Codex 已知的本地 Git 项目"
+    });
+  }
+  const scan = scanProjectsRoot(projectsRootPath);
+  cacheScannedProjects(scan);
+  return currentWorkbenchData(input, {
+    type: "refreshProjects",
+    ok: true,
+    message: `已刷新项目目录，发现 ${scan.repositories.length} 个 Git 仓库`
+  });
+}
+
+function chooseNativeProjectsRoot(input = {}) {
+  if (process.platform !== "darwin") {
+    throw new Error("当前系统不支持原生目录选择器。请在项目目录设置中填写绝对路径。");
+  }
+  const result = spawnSync(
+    "osascript",
+    ["-e", 'POSIX path of (choose folder with prompt "选择包含 Git 项目的目录")'],
+    { encoding: "utf8", timeout: 300_000, windowsHide: true }
+  );
+  if (result.error) throw new Error(`无法打开目录选择器：${result.error.message}`);
+  if (result.status !== 0) {
+    const detail = (result.stderr || result.stdout || "").trim();
+    if (/cancel|取消|-128/i.test(detail)) {
+      return currentWorkbenchData(input, {
+        type: "chooseProjectsRoot",
+        ok: true,
+        message: "已取消选择项目目录"
+      });
+    }
+    throw new Error(detail || "无法选择项目目录。");
+  }
+  return setProjectsRoot({ ...input, rootPath: result.stdout.trim() });
+}
+
 function toolResult(snapshot, render = false) {
-  const summary = `${snapshot.repoName}: ${snapshot.currentBranch}, ${snapshot.commits.length} commits on ${snapshot.selectedRef}, ${snapshot.localBranches.length} local branches, ${snapshot.remoteBranches.length} remote branches, ${snapshot.tags.length} tags, ${snapshot.worktrees.length} worktrees.`;
+  const isRepositorySnapshot = Array.isArray(snapshot?.commits);
+  const summary = isRepositorySnapshot
+    ? `${snapshot.repoName}: ${snapshot.currentBranch}, ${snapshot.commits.length} commits on ${snapshot.selectedRef}, ${snapshot.localBranches.length} local branches, ${snapshot.remoteBranches.length} remote branches, ${snapshot.tags.length} tags, ${snapshot.worktrees.length} worktrees.`
+    : "Choose a local Git repository to open in Git Branch Workbench.";
   const result = {
     structuredContent: snapshot,
     content: [{ type: "text", text: snapshot.operation?.message || summary }]
@@ -835,6 +1261,46 @@ function toolResult(snapshot, render = false) {
     };
   }
   return result;
+}
+
+function homeResult() {
+  const recentRepoPath = readRecentRepositoryState().repoPath;
+  if (recentRepoPath) {
+    try {
+      return toolResult(getSnapshot({ repoPath: recentRepoPath }), true);
+    } catch (error) {
+      return {
+        structuredContent: {
+          schemaVersion: 5,
+          view: "home",
+          recentRepoPath,
+          projectsRootPath: readRecentRepositoryState().projectsRootPath,
+          repositories: discoverRepositories(),
+          error: error instanceof Error ? error.message : String(error)
+        },
+        content: [{ type: "text", text: "The recent Git repository is no longer available. Choose another repository." }],
+        _meta: {
+          ui: { resourceUri: TEMPLATE_URI },
+          "openai/outputTemplate": TEMPLATE_URI
+        }
+      };
+    }
+  }
+  return {
+    structuredContent: {
+      schemaVersion: 5,
+      view: "home",
+      recentRepoPath: "",
+      projectsRootPath: readRecentRepositoryState().projectsRootPath,
+      repositories: discoverRepositories(),
+      error: ""
+    },
+    content: [{ type: "text", text: "Choose a local Git repository to open in Git Branch Workbench." }],
+    _meta: {
+      ui: { resourceUri: TEMPLATE_URI },
+      "openai/outputTemplate": TEMPLATE_URI
+    }
+  };
 }
 
 async function handleRequest(message) {
@@ -891,6 +1357,22 @@ async function handleRequest(message) {
     if (method === "tools/call") {
       const toolName = params.name;
       const args = params.arguments || {};
+      if (toolName === "open_git_branch_workbench_home") {
+        rpcResult(id, homeResult());
+        return;
+      }
+      if (toolName === "set_git_projects_root") {
+        rpcResult(id, toolResult(setProjectsRoot(args)));
+        return;
+      }
+      if (toolName === "choose_git_projects_root") {
+        rpcResult(id, toolResult(chooseNativeProjectsRoot(args)));
+        return;
+      }
+      if (toolName === "refresh_git_projects") {
+        rpcResult(id, toolResult(refreshProjects(args)));
+        return;
+      }
       if (toolName === "get_git_snapshot") {
         rpcResult(id, toolResult(getSnapshot(args)));
         return;

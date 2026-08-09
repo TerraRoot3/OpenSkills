@@ -5,11 +5,34 @@
       "assertions": [
         "Resolve an absolute Git root",
         "Invoke Open Git Branch Workbench",
+        "Select the repository belonging to the current conversation by default",
+        "Show a repository selector populated from the saved projects directory or valid local Git projects already known to Codex",
         "Show a compact inline repository card before the full workbench",
         "Expand to the OpenGit-style branch and commit history page on user action",
         "Group local branches, remote branches, tags, and worktrees in the expanded page",
         "Allow each group to expand or collapse independently",
         "Return up to 200 commits for the selected ref"
+      ]
+    },
+    {
+      "query": "从任务面板打开 Git 工作台，然后换到另一个本地项目看看。",
+      "assertions": [
+        "Invoke the no-argument Git Branch Workbench home tool",
+        "Restore the most recently viewed valid repository when one exists",
+        "Otherwise show a selector of valid local Git projects already known to Codex",
+        "Switch repositories by requesting a read-only snapshot for the selected absolute Git root",
+        "Do not checkout a branch or mutate either repository"
+      ]
+    },
+    {
+      "query": "把 workspace 设成项目目录，以后点刷新重新扫描仓库。",
+      "assertions": [
+        "Require the exact user-selected absolute projects directory",
+        "Use the native directory chooser on macOS or accept an explicit absolute path",
+        "Persist the projects directory in plugin-local state",
+        "Discover Git repositories no deeper than three child-directory levels",
+        "Skip hidden, dependency, and generated-output directories",
+        "Refresh the selector without checking out a branch or changing repository files"
       ]
     },
     {
@@ -83,8 +106,10 @@
     {
       "query": "当前目录不是 Git 仓库，但打开分支图。",
       "assertions": [
-        "Ask for a repository folder",
-        "Do not guess or pass a non-Git path to the MCP tool"
+        "Open the no-argument home selector first",
+        "Use only valid Git projects discovered from Codex workspace state or recent history",
+        "Ask for a repository folder only when the selector is empty or the requested project is absent",
+        "Do not guess or pass a non-Git path to a repository-scoped MCP tool"
       ]
     },
     {
