@@ -32,6 +32,11 @@ if (args[0] === "auth") {
   if (process.env.FAKE_AUTH_FAIL === "1") { process.stderr.write("not logged in"); process.exit(1); }
   output("active account fixture");
 } else if (args[0] === "repo" && args[1] === "view") {
+  const expected = ["repo", "view", "acme/widgets", "--json", "defaultBranchRef,url,nameWithOwner"];
+  if (JSON.stringify(args) !== JSON.stringify(expected)) {
+    process.stderr.write("unexpected gh repo view args: " + args.join(" "));
+    process.exit(6);
+  }
   output({ defaultBranchRef: { name: "main" }, url: "https://github.com/acme/widgets", nameWithOwner: "acme/widgets" });
 } else if (args[0] === "workflow" && args[1] === "list") {
   output([

@@ -557,7 +557,7 @@ function pendingGithubRun(repo, input) {
 function listGithubTargets(repo) {
   checkAuth(repo);
   const repoId = ghRepoId(repo);
-  const metadata = parseJson(runCommand(GH_COMMAND, ["repo", "view", "--repo", repoId, "--json", "defaultBranchRef,url,nameWithOwner"], {
+  const metadata = parseJson(runCommand(GH_COMMAND, ["repo", "view", repoId, "--json", "defaultBranchRef,url,nameWithOwner"], {
     cwd: repo.repoRoot,
     timeout: 30_000
   }).stdout, "GitHub 仓库信息") || {};
