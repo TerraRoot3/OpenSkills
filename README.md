@@ -25,10 +25,6 @@ Shared Codex skills for cross-machine installation and team reuse.
   - Exact remote-fingerprint profiles keep confirmed repository exceptions and production gates outside project files; the PagePop profile conditionally syncs mainline, blocks concurrent `deploy-prod.yml` runs, reuses successful exact-SHA tags, and returns a CI/CD monitor handoff
   - The bundled script refuses whole-worktree staging, force push, admin bypass, direct mainline push, automatic conflict guesses, and unrelated later commits in a tag
 
-- `gitlab-publish-environment` (legacy compatibility)
-  - Retained only for repositories that explicitly require the old direct target-branch merge workflow
-  - Disabled for implicit invocation; use `git-publish-environment` for normal `发布测网` and `发布现网` requests
-
 - `gitlab-production-readiness-check`
   - Run the pre-production sync check on the current GitLab demand branch before a real production publish
   - Trigger phrases include `上线检查`, `做一下上线检查`, `现网上线前检查`, and requests to merge the latest `master` or `main` into the current demand branch to review impact

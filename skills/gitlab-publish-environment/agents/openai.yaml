@@ -1,6 +1,0 @@
-interface:
-  display_name: "GitLab Publish Environment (Legacy)"
-  short_description: "Legacy direct-branch GitLab environment publishing workflow"
-  default_prompt: "Use $gitlab-publish-environment only for a repository that explicitly requires the legacy direct target-branch merge workflow."
-policy:
-  allow_implicit_invocation: false
