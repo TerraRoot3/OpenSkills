@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "profiles": [
+    {
+      "id": "pagepop-work",
+      "display_name": "PagePop Work",
+      "remote_fingerprint": "github:github.com/pagepop/pagepop-agent",
+      "rule_sources": [
+        {
+          "kind": "repository_guide",
+          "location": "docs/guides/git-workflow.md:156",
+          "statement": "发布测网前同步最新 origin/main。"
+        },
+        {
+          "kind": "confirmed_external_override",
+          "location": "global OpenSkills repository profile",
+          "statement": "需求分支与主分支差异小时跳过同步，差异大时才建议 main -> 需求分支。"
+        }
+      ],
+      "rule_conflict": {
+        "summary": "项目 Guide 要求每次测网同步 origin/main；用户确认的仓库外置规则改为按大分叉阈值条件同步。",
+        "effective_rule": "采用用户确认的仓库外置例外：小分叉不合主分支，大分叉只建议并等待显式授权。",
+        "project_files_modified": false
+      },
+      "test": {
+        "mainline_sync_policy": "large-divergence-only",
+        "main_behind_threshold": 100,
+        "main_overlap_files_threshold": 20,
+        "forbid_dev_into_source": true
+      },
+      "identity": {
+        "expected_login": "hanbaokun"
+      },
+      "production": {
+        "workflow": "deploy-prod.yml",
+        "blocking_statuses": [
+          "queued",
+          "pending",
+          "in_progress",
+          "waiting"
+        ],
+        "reuse_successful_tag_for_same_sha": true,
+        "require_reason_after_unsuccessful_tag": true,
+        "monitor_required": true,
+        "runtime_verification_required": true
+      }
+    }
+  ]
+}

@@ -97,6 +97,11 @@ const toolDefinitions = [
         workflow: monitorProperties.workflow,
         ref: monitorProperties.ref,
         environment: monitorProperties.environment,
+        confirmed: {
+          type: "boolean",
+          const: true,
+          description: "Must be true only after the user confirms the exact provider, repository, workflow or pipeline, ref, environment, and input or variable names."
+        },
         inputs: {
           type: "object",
           description: "GitHub workflow_dispatch string inputs. Values are sent through stdin and are never returned by the tool.",
@@ -108,11 +113,11 @@ const toolDefinitions = [
           additionalProperties: { type: "string" }
         }
       },
-      required: ["repoPath", "provider", "ref"]
+      required: ["repoPath", "provider", "ref", "environment", "confirmed"]
     },
     annotations: {
       readOnlyHint: false,
-      destructiveHint: false,
+      destructiveHint: true,
       idempotentHint: false,
       openWorldHint: true
     },
@@ -227,7 +232,10 @@ function runCommand(command, args, { cwd, input, timeout = 30_000, allowFailure 
     stderr: result.stderr || ""
   };
   if (!output.ok && !allowFailure) {
-    const detail = redactText(output.stderr || output.stdout || "命令执行失败", redactions);
+    const hasShortSecret = redactions.some((secret) => typeof secret === "string" && secret.length > 0 && secret.length < 3);
+    const detail = hasShortSecret
+      ? "命令返回错误，敏感输入与提供商原始输出已隐藏"
+      : redactText(output.stderr || output.stdout || "命令执行失败", redactions);
     throw new Error(`${basename(command)} 执行失败：${detail || "未知错误"}`);
   }
   return output;
@@ -340,17 +348,41 @@ function gitlabEndpoint(repo, suffix = "") {
   return `projects/${encodeURIComponent(repo.projectPath)}${suffix}`;
 }
 
+function expectedGithubLogin(repo) {
+  const owner = repo.projectPath.split("/")[0]?.toLowerCase() || "";
+  if (owner === "terraroot3") return "TerraRoot3";
+  if (owner === "hanbaokun" || owner === "pagepop") return "hanbaokun";
+  return "";
+}
+
 function checkAuth(repo) {
   if (repo.provider === "github") {
     runCommand(GH_COMMAND, ["auth", "status", "--active", "--hostname", repo.host], {
       cwd: repo.repoRoot,
       timeout: 20_000
     });
+    const login = runCommand(GH_COMMAND, ["api", "--hostname", repo.host, "user", "--jq", ".login"], {
+      cwd: repo.repoRoot,
+      timeout: 20_000
+    }).stdout.trim();
+    if (!login) throw new Error(`无法确认 ${repo.host} 的当前 GitHub 账号。`);
+    const expected = expectedGithubLogin(repo);
+    if (expected && login.toLowerCase() !== expected.toLowerCase()) {
+      throw new Error(`GitHub 账号不匹配：仓库 Owner 要求 ${expected}，当前账号为 ${login}。请在插件外切换账号后重试。`);
+    }
+    return login;
   } else {
     runCommand(GLAB_COMMAND, ["auth", "status", "--hostname", repo.host], {
       cwd: repo.repoRoot,
       timeout: 20_000
     });
+    const profile = parseJson(runCommand(GLAB_COMMAND, ["api", "--hostname", repo.host, "/user"], {
+      cwd: repo.repoRoot,
+      timeout: 20_000
+    }).stdout, "GitLab 当前账号");
+    const login = String(profile?.username || "").trim();
+    if (!login) throw new Error(`无法确认 ${repo.host} 的当前 GitLab 账号。`);
+    return login;
   }
 }
 
@@ -555,7 +587,7 @@ function pendingGithubRun(repo, input) {
 }
 
 function listGithubTargets(repo) {
-  checkAuth(repo);
+  const activeLogin = checkAuth(repo);
   const repoId = ghRepoId(repo);
   const metadata = parseJson(runCommand(GH_COMMAND, ["repo", "view", repoId, "--json", "defaultBranchRef,url,nameWithOwner"], {
     cwd: repo.repoRoot,
@@ -573,6 +605,7 @@ function listGithubTargets(repo) {
     provider: "github",
     providerLabel: "GitHub Actions",
     host: repo.host,
+    activeLogin,
     repository: repo.projectPath,
     webUrl: metadata.url || `https://${repo.host}/${repo.projectPath}`,
     defaultRef,
@@ -589,7 +622,7 @@ function listGithubTargets(repo) {
 }
 
 function listGitlabTargets(repo) {
-  checkAuth(repo);
+  const activeLogin = checkAuth(repo);
   const project = parseJson(runCommand(GLAB_COMMAND, ["api", "--hostname", repo.host, gitlabEndpoint(repo)], {
     cwd: repo.repoRoot,
     timeout: 30_000
@@ -602,6 +635,7 @@ function listGitlabTargets(repo) {
     provider: "gitlab",
     providerLabel: "GitLab CI/CD",
     host: repo.host,
+    activeLogin,
     repository: repo.projectPath,
     webUrl: project.web_url || `https://${repo.host}/${repo.projectPath}`,
     defaultRef,
@@ -750,6 +784,8 @@ function triggerGitlabRun(repo, input) {
 }
 
 function triggerRun(input) {
+  if (input.confirmed !== true) throw new Error("触发流水线前必须确认完整目标并传入 confirmed=true。");
+  requireText(input.environment, "environment");
   const repo = discoverRepository(input.repoPath, input.provider);
   return repo.provider === "github" ? triggerGithubRun(repo, input) : triggerGitlabRun(repo, input);
 }

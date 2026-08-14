@@ -1,0 +1,4 @@
+interface:
+  display_name: "Git Publish Environment"
+  short_description: "安全发布 GitHub/GitLab 测网、现网与版本标签"
+  default_prompt: "Use $git-publish-environment to publish the current demand branch to the requested test or production environment."

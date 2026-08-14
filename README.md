@@ -16,13 +16,18 @@ Shared Codex skills for cross-machine installation and team reuse.
   - Extract text nodes, image references, embedded images, Figma blobs, and raw `.fig` internals
   - Useful when Figma API access is unavailable, rate-limited, or incomplete
 
-- `gitlab-publish-environment`
-  - Publish GitLab backend or web frontend repositories to shared environments
-  - `发布测网` maps to `dev`
-  - `发布预发` maps to `release`
-  - `发布现网` or `发布到现网` first syncs `master` into the source branch, then merges into `master`, pushes `master`, pushes the next version tag, and switches back to the original branch
-  - Default policy is to merge the full source branch into the requested target branch; do not silently switch to cherry-pick or isolated publish flows unless the user explicitly asks for that exception or repo rules require it
-  - Not for Flutter, iOS, Android, React Native, or other mobile app repositories
+- `git-publish-environment`
+  - Publish GitHub or GitLab backend/web demand branches to test or production
+  - Before test publication, compare only the demand branch with `main`/`master`; skip mainline sync for small divergence and require an explicit opt-in when the configurable large-divergence threshold is reached
+  - Test publication is strictly one-way (`demand branch -> dev`): rebuild stale/diverged local `dev` from `origin/dev`, then merge the immutable demand SHA in an isolated worktree without ever merging `dev` back into the demand branch
+  - If that test merge conflicts, refresh and report the exact demand-versus-mainline divergence before choosing isolated conflict resolution or a separately authorized mainline sync
+  - Production syncs mainline into the demand branch only when needed, merges through PR/MR, bounds CI/review waiting, and tags the exact merged mainline SHA
+  - Exact remote-fingerprint profiles keep confirmed repository exceptions and production gates outside project files; the PagePop profile conditionally syncs mainline, blocks concurrent `deploy-prod.yml` runs, reuses successful exact-SHA tags, and returns a CI/CD monitor handoff
+  - The bundled script refuses whole-worktree staging, force push, admin bypass, direct mainline push, automatic conflict guesses, and unrelated later commits in a tag
+
+- `gitlab-publish-environment` (legacy compatibility)
+  - Retained only for repositories that explicitly require the old direct target-branch merge workflow
+  - Disabled for implicit invocation; use `git-publish-environment` for normal `发布测网` and `发布现网` requests
 
 - `gitlab-production-readiness-check`
   - Run the pre-production sync check on the current GitLab demand branch before a real production publish
@@ -61,17 +66,17 @@ Shared Codex skills for cross-machine installation and team reuse.
   - Detects GitHub Actions or GitLab CI/CD from the current repository remote
   - Reuses the active local `gh` or host-specific `glab` login without storing access tokens
   - Triggers an explicitly confirmed test, staging, or production pipeline and returns a compact conversation card
-  - Refreshes queued and running pipelines automatically, then stops at success, failure, cancellation, or skip
+  - Refreshes queued and running pipelines automatically, watches failed runs for a bounded retry window, and persists real success so reopened cards do not resume polling
   - Shows environment, ref, commit, duration, job progress, and provider failure summary without an internal scrollbar
   - Opens the exact GitHub or GitLab run in the system browser through a CSP-allowlisted action
-  - Requires explicit provider, repository, workflow, ref, environment, and input confirmation before production release
+  - Requires an explicit mechanical confirmation flag for provider, repository, workflow, ref, environment, and inputs before any trigger, with Owner-to-account checks for configured GitHub identities
 
 ## Install Example
 
 On another machine, install this skill from the repo path:
 
 ```bash
-python3 ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-github.py   --repo TerraRoot3/OpenSkills   --path skills/gitlab-publish-environment
+python3 ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-github.py   --repo TerraRoot3/OpenSkills   --path skills/git-publish-environment
 ```
 
 If the repository is private, make sure git or GitHub credentials are available first.

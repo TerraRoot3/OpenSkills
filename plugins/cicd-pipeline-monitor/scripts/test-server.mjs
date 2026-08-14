@@ -31,6 +31,8 @@ const output = (value) => process.stdout.write(typeof value === "string" ? value
 if (args[0] === "auth") {
   if (process.env.FAKE_AUTH_FAIL === "1") { process.stderr.write("not logged in"); process.exit(1); }
   output("active account fixture");
+} else if (args[0] === "api") {
+  output(process.env.FAKE_GH_LOGIN || "fixture-user");
 } else if (args[0] === "repo" && args[1] === "view") {
   const expected = ["repo", "view", "acme/widgets", "--json", "defaultBranchRef,url,nameWithOwner"];
   if (JSON.stringify(args) !== JSON.stringify(expected)) {
@@ -94,8 +96,10 @@ if (args[0] === "auth") {
   output("authenticated fixture");
 } else if (args[0] === "api") {
   const endpoint = args.find((item) => item.startsWith("projects/"));
-  if (!endpoint) process.exit(4);
-  if (args.includes("POST") && endpoint.endsWith("/pipeline")) {
+  if (args.includes("/user")) {
+    output({ username: "hanbaokun" });
+  } else if (!endpoint) process.exit(4);
+  else if (args.includes("POST") && endpoint.endsWith("/pipeline")) {
     let body = "";
     process.stdin.on("data", (chunk) => body += chunk);
     process.stdin.on("end", () => {
@@ -196,6 +200,7 @@ try {
   const ghTargets = await client.tool("list_cicd_targets", { repoPath: githubRepo });
   assert.equal(ghTargets.isError, undefined);
   assert.equal(ghTargets.structuredContent.provider, "github");
+  assert.equal(ghTargets.structuredContent.activeLogin, "fixture-user");
   assert.equal(ghTargets.structuredContent.targets.length, 2);
   assert.equal(ghTargets.structuredContent.targets[0].workflow, ".github/workflows/release.yml");
 
@@ -205,6 +210,7 @@ try {
     workflow: ".github/workflows/release.yml",
     ref: "main",
     environment: "测网",
+    confirmed: true,
     inputs: { environment: "test" }
   });
   assert.equal(ghTriggered.structuredContent.status, "running");
@@ -219,6 +225,7 @@ try {
   const glTargets = await client.tool("list_cicd_targets", { repoPath: gitlabRepo });
   assert.equal(glTargets.structuredContent.provider, "gitlab");
   assert.equal(glTargets.structuredContent.host, "gitlab.example.test");
+  assert.equal(glTargets.structuredContent.activeLogin, "hanbaokun");
   assert.equal(glTargets.structuredContent.targets[0].id, "gitlab-pipeline");
 
   const glTriggered = await client.tool("trigger_cicd_run", {
@@ -226,6 +233,7 @@ try {
     provider: "gitlab",
     ref: "main",
     environment: "现网",
+    confirmed: true,
     variables: { DEPLOY_ENV: "production" }
   });
   assert.equal(glTriggered.structuredContent.status, "queued");
@@ -244,6 +252,48 @@ try {
   const redirects = resource.result.contents[0]._meta["openai/widgetCSP"].redirect_domains;
   assert.ok(redirects.includes("https://gitlab.example.test"));
   assert.ok(resource.result.contents[0].text.includes("window.openai.callTool"));
+  assert.ok(resource.result.contents[0].text.includes('id="cicd-manual-success"'));
+  assert.ok(resource.result.contents[0].text.includes("window.openai.setWidgetState"));
+  assert.ok(resource.result.contents[0].text.includes("远端流水线状态未修改"));
+  assert.ok(resource.result.contents[0].text.includes("refreshEpoch !== state.refreshEpoch || isManuallyCompleted()"));
+  assert.ok(resource.result.contents[0].text.includes("providerCompletion"));
+  assert.ok(resource.result.contents[0].text.includes("snapshot.monitor?.triggeredAt || snapshot.runId"));
+  assert.ok(resource.result.contents[0].text.includes("failureWatchMilliseconds = 10 * 60 * 1000"));
+  assert.ok(resource.result.contents[0].text.includes("已从卡片持久状态恢复真实成功结果"));
+  assert.ok(resource.result.contents[0].text.includes("void refresh({ force: true })"));
+
+  const missingConfirmation = await client.tool("trigger_cicd_run", {
+    repoPath: githubRepo,
+    provider: "github",
+    workflow: ".github/workflows/release.yml",
+    ref: "main",
+    environment: "测网",
+    inputs: { environment: "test" }
+  });
+  assert.equal(missingConfirmation.isError, true);
+  assert.match(missingConfirmation.content[0].text, /confirmed=true/);
+
+  const shortSecretFailure = await client.tool("trigger_cicd_run", {
+    repoPath: githubRepo,
+    provider: "github",
+    workflow: ".github/workflows/release.yml",
+    ref: "main",
+    environment: "测网",
+    confirmed: true,
+    inputs: { environment: "XY" }
+  });
+  assert.equal(shortSecretFailure.isError, true);
+  assert.match(shortSecretFailure.content[0].text, /敏感输入与提供商原始输出已隐藏/);
+
+  const mappedGithubRepo = createRepo("mapped-github-repo", "git@github.com:TerraRoot3/OpenSkills.git");
+  const wrongAccountClient = new RpcClient({ FAKE_GH_LOGIN: "hanbaokun" });
+  try {
+    const accountMismatch = await wrongAccountClient.tool("list_cicd_targets", { repoPath: mappedGithubRepo });
+    assert.equal(accountMismatch.isError, true);
+    assert.match(accountMismatch.content[0].text, /Owner 要求 TerraRoot3/);
+  } finally {
+    wrongAccountClient.close();
+  }
 
   const authClient = new RpcClient({ FAKE_AUTH_FAIL: "1" });
   try {

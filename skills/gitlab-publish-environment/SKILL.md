@@ -1,9 +1,11 @@
 ---
 name: gitlab-publish-environment
-description: Use when the user says 发布测网, 提测, 合并到dev, 同步到dev, 发布到dev, 发布预发, 提预发, 合并到release, 同步到release, 发布到release, 发布现网, 发布到现网, 发布生产, 发布到生产, 合并到master, 同步到master, 发布到master, or asks to ship a GitLab backend or web frontend repository to dev, release, or master. Do not use for Flutter, iOS, Android, React Native, or other mobile app repositories.
+description: Legacy compatibility workflow for GitLab repositories that still require direct target-branch merges. Use only when the user explicitly invokes gitlab-publish-environment or repository rules require this legacy flow. For normal GitHub/GitLab test or production publishing, use git-publish-environment instead.
 ---
 
 # GitLab Publish Environment
+
+> Legacy compatibility only. Prefer `git-publish-environment`, which uses isolated test integration, PR/MR-only production merge, bounded waiting, and exact mainline tagging.
 
 ## Overview
 

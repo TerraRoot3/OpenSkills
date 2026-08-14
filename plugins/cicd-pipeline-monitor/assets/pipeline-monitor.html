@@ -52,6 +52,10 @@
   <footer class="cicd-footer">
     <span id="cicd-updated" class="cicd-updated">等待状态…</span>
     <div class="cicd-actions">
+      <button id="cicd-manual-success" type="button" class="cicd-manual-success-button" hidden aria-pressed="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
+        <span id="cicd-manual-success-label">标记成功</span>
+      </button>
       <button id="cicd-refresh" type="button" class="cicd-icon-button" title="立即刷新" aria-label="立即刷新">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5M4 18v-5h5M18.4 9a7 7 0 0 0-11.7-2.6L4 9m16 6-2.7 2.6A7 7 0 0 1 5.6 15"/></svg>
       </button>
@@ -130,6 +134,8 @@
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
   }
+
+  [hidden] { display: none !important; }
 
   .cicd-card {
     width: 100%;
@@ -383,6 +389,7 @@
   .cicd-actions { display: flex; align-items: center; gap: 6px; }
 
   .cicd-icon-button,
+  .cicd-manual-success-button,
   .cicd-open-button {
     display: inline-flex;
     align-items: center;
@@ -396,17 +403,28 @@
   }
 
   .cicd-icon-button:hover,
+  .cicd-manual-success-button:hover,
   .cicd-open-button:hover { background: var(--cicd-button-hover); }
   .cicd-icon-button:active,
+  .cicd-manual-success-button:active,
   .cicd-open-button:active { border-color: var(--cicd-text); }
   .cicd-icon-button:focus-visible,
+  .cicd-manual-success-button:focus-visible,
   .cicd-open-button:focus-visible { outline: 2px solid var(--cicd-blue); outline-offset: 2px; }
   .cicd-icon-button:disabled,
+  .cicd-manual-success-button:disabled,
   .cicd-open-button:disabled { cursor: default; opacity: .48; }
 
   .cicd-icon-button { width: 28px; padding: 0; }
+  .cicd-manual-success-button,
   .cicd-open-button { gap: 6px; padding: 0 9px; font-size: 11px; font-weight: 550; }
+  .cicd-manual-success-button.is-active {
+    color: var(--cicd-green);
+    border-color: var(--cicd-green);
+    background: var(--cicd-green-bg);
+  }
   .cicd-icon-button svg,
+  .cicd-manual-success-button svg,
   .cicd-open-button svg {
     width: 14px;
     height: 14px;
@@ -438,6 +456,12 @@
 <script>
 (() => {
   const terminalStatuses = new Set(["success", "failed", "cancelled", "skipped"]);
+  const pollingStopStatuses = new Set(["success", "cancelled", "skipped"]);
+  const failureWatchMilliseconds = 10 * 60 * 1000;
+  const savedWidgetState = window.openai?.widgetState?.privateContent || window.openai?.widgetState || {};
+  const savedManualCompletion = savedWidgetState.manualCompletion;
+  const savedProviderCompletion = savedWidgetState.providerCompletion;
+  const savedFailureWatch = savedWidgetState.failureWatch;
   const statusLabels = {
     queued: "等待中",
     running: "运行中",
@@ -452,7 +476,25 @@
     timer: null,
     refreshing: false,
     failures: 0,
-    lastHeight: 0
+    lastHeight: 0,
+    refreshEpoch: 0,
+    lastPersistedState: "",
+    manualCompletion: savedManualCompletion && typeof savedManualCompletion.monitorKey === "string"
+      ? {
+          monitorKey: savedManualCompletion.monitorKey,
+          completedAt: typeof savedManualCompletion.completedAt === "string" ? savedManualCompletion.completedAt : ""
+        }
+      : null,
+    providerCompletion: savedProviderCompletion
+      && typeof savedProviderCompletion.monitorKey === "string"
+      && savedProviderCompletion.status === "success"
+      ? savedProviderCompletion
+      : null,
+    failureWatch: savedFailureWatch
+      && typeof savedFailureWatch.monitorKey === "string"
+      && typeof savedFailureWatch.expiresAt === "string"
+      ? savedFailureWatch
+      : null
   };
   const $ = (selector) => document.querySelector(selector);
 
@@ -483,6 +525,155 @@
       minute: "2-digit",
       second: "2-digit"
     }).format(date)}`;
+  }
+
+  function monitorKey(snapshot) {
+    if (!snapshot) return "";
+    const runKey = snapshot.monitor?.triggeredAt || snapshot.runId || snapshot.pipelineId || snapshot.monitor?.runId || snapshot.monitor?.pipelineId || "";
+    return [snapshot.provider || "", snapshot.repository || "", runKey, snapshot.ref || ""].join("::");
+  }
+
+  function isManuallyCompleted(snapshot = state.snapshot) {
+    const key = monitorKey(snapshot);
+    return Boolean(key && state.manualCompletion?.monitorKey === key);
+  }
+
+  function persistWidgetState() {
+    if (!window.openai?.setWidgetState) return;
+    const snapshot = state.snapshot;
+    const manuallyCompleted = isManuallyCompleted(snapshot);
+    const nextState = {
+      modelContent: snapshot ? {
+        kind: "cicd-monitor-control",
+        provider: snapshot.provider,
+        repository: snapshot.repository,
+        runId: snapshot.runId || snapshot.pipelineId || "",
+        providerStatus: snapshot.status,
+        monitoringStatus: manuallyCompleted
+          ? "manually_stopped_as_success"
+          : terminalStatuses.has(snapshot.status) ? "provider_terminal" : "active"
+      } : null,
+      privateContent: {
+        manualCompletion: state.manualCompletion,
+        providerCompletion: state.providerCompletion,
+        failureWatch: state.failureWatch
+      }
+    };
+    const serialized = JSON.stringify(nextState);
+    if (serialized === state.lastPersistedState) return;
+    state.lastPersistedState = serialized;
+    window.openai.setWidgetState(nextState);
+  }
+
+  function compactProviderCompletion(snapshot) {
+    return {
+      monitorKey: monitorKey(snapshot),
+      status: "success",
+      completedAt: snapshot.finishedAt || snapshot.updatedAt || new Date().toISOString(),
+      updatedAt: snapshot.updatedAt || "",
+      finishedAt: snapshot.finishedAt || "",
+      durationSeconds: Number.isFinite(snapshot.durationSeconds) ? snapshot.durationSeconds : null,
+      progress: {
+        completed: Number(snapshot.progress?.completed || 0),
+        total: Number(snapshot.progress?.total || 0)
+      },
+      runId: snapshot.runId || "",
+      pipelineId: snapshot.pipelineId || "",
+      runNumber: snapshot.runNumber || "",
+      sha: snapshot.sha || "",
+      url: snapshot.url || ""
+    };
+  }
+
+  function restoreProviderCompletion(snapshot) {
+    const completion = state.providerCompletion;
+    if (!completion || completion.monitorKey !== monitorKey(snapshot) || completion.status !== "success") return snapshot;
+    return {
+      ...snapshot,
+      status: "success",
+      rawStatus: "persisted_success",
+      runId: completion.runId || snapshot.runId || "",
+      pipelineId: completion.pipelineId || snapshot.pipelineId || "",
+      runNumber: completion.runNumber || snapshot.runNumber || "",
+      sha: completion.sha || snapshot.sha || "",
+      url: completion.url || snapshot.url || "",
+      finishedAt: completion.finishedAt || completion.completedAt || snapshot.finishedAt || "",
+      updatedAt: completion.updatedAt || completion.completedAt || snapshot.updatedAt || "",
+      durationSeconds: Number.isFinite(completion.durationSeconds) ? completion.durationSeconds : snapshot.durationSeconds,
+      progress: completion.progress || snapshot.progress,
+      errorSummary: "",
+      message: "已从卡片持久状态恢复真实成功结果。"
+    };
+  }
+
+  function failureWatchExpiry(snapshot) {
+    const observedAt = new Date(snapshot.finishedAt || snapshot.updatedAt || Date.now()).getTime();
+    const base = Number.isFinite(observedAt) ? observedAt : Date.now();
+    return new Date(base + failureWatchMilliseconds).toISOString();
+  }
+
+  function reconcilePersistedState(incomingSnapshot) {
+    const key = monitorKey(incomingSnapshot);
+    let changed = false;
+    for (const field of ["manualCompletion", "providerCompletion", "failureWatch"]) {
+      if (state[field] && state[field].monitorKey !== key) {
+        state[field] = null;
+        changed = true;
+      }
+    }
+
+    let snapshot = restoreProviderCompletion(incomingSnapshot);
+    if (snapshot.status === "success") {
+      const completion = compactProviderCompletion(snapshot);
+      if (JSON.stringify(completion) !== JSON.stringify(state.providerCompletion)) {
+        state.providerCompletion = completion;
+        changed = true;
+      }
+      if (state.manualCompletion || state.failureWatch) {
+        state.manualCompletion = null;
+        state.failureWatch = null;
+        changed = true;
+      }
+    } else if (snapshot.status === "failed") {
+      if (!state.failureWatch) {
+        state.failureWatch = {
+          monitorKey: key,
+          expiresAt: failureWatchExpiry(snapshot)
+        };
+        changed = true;
+      }
+    } else if (["queued", "running"].includes(snapshot.status) && state.failureWatch) {
+      state.failureWatch = null;
+      changed = true;
+    } else if (["cancelled", "skipped"].includes(snapshot.status) && state.failureWatch) {
+      state.failureWatch = null;
+      changed = true;
+    }
+    return { snapshot, changed };
+  }
+
+  function failureWatchActive(snapshot = state.snapshot) {
+    if (snapshot?.status !== "failed") return false;
+    if (!state.failureWatch || state.failureWatch.monitorKey !== monitorKey(snapshot)) return false;
+    const expiresAt = new Date(state.failureWatch.expiresAt).getTime();
+    return Number.isFinite(expiresAt) && expiresAt > Date.now();
+  }
+
+  function shouldAutoPoll(snapshot = state.snapshot) {
+    if (!snapshot || isManuallyCompleted(snapshot) || pollingStopStatuses.has(snapshot.status)) return false;
+    if (snapshot.status === "failed") return failureWatchActive(snapshot);
+    return true;
+  }
+
+  function syncActions(snapshot, manuallyCompleted) {
+    const manualButton = $("#cicd-manual-success");
+    manualButton.hidden = !snapshot || (snapshot.status === "success" && !manuallyCompleted);
+    manualButton.classList.toggle("is-active", manuallyCompleted);
+    manualButton.setAttribute("aria-pressed", String(manuallyCompleted));
+    manualButton.title = manuallyCompleted ? "恢复自动监控" : "将此卡片手动标记为成功并停止自动刷新";
+    $("#cicd-manual-success-label").textContent = manuallyCompleted ? "恢复监控" : "标记成功";
+    $("#cicd-refresh").disabled = state.refreshing || manuallyCompleted;
+    $("#cicd-refresh").title = manuallyCompleted ? "已停止自动刷新" : "立即刷新";
   }
 
   function reportHeight() {
@@ -539,7 +730,11 @@
 
   function render(snapshot) {
     if (!snapshot || snapshot.kind !== "cicd-monitor") return;
+    const reconciled = reconcilePersistedState(snapshot);
+    snapshot = reconciled.snapshot;
     state.snapshot = snapshot;
+    if (reconciled.changed) persistWidgetState();
+    const manuallyCompleted = isManuallyCompleted(snapshot);
     const icon = $("#cicd-provider-icon");
     icon.className = `cicd-provider-icon is-${snapshot.provider || "github"}`;
     icon.innerHTML = providerIcon(snapshot.provider);
@@ -550,9 +745,9 @@
     const suffix = snapshot.runNumber ? ` #${snapshot.runNumber}` : "";
     $("#cicd-title").textContent = `${snapshot.pipelineName || "CI/CD Pipeline"}${suffix}`;
 
-    const status = snapshot.status || "unknown";
+    const status = manuallyCompleted ? "success" : snapshot.status || "unknown";
     $("#cicd-status").className = `cicd-status is-${status}`;
-    $("#cicd-status-label").textContent = statusLabels[status] || "未知";
+    $("#cicd-status-label").textContent = manuallyCompleted ? "已手动成功" : statusLabels[status] || "未知";
     $("#cicd-ref").textContent = snapshot.ref || "—";
     $("#cicd-sha").textContent = snapshot.sha ? snapshot.sha.slice(0, 8) : "—";
     $("#cicd-duration").textContent = formatDuration(snapshot.durationSeconds);
@@ -569,12 +764,20 @@
     renderJobs(Array.isArray(snapshot.jobs) ? snapshot.jobs : []);
 
     const message = $("#cicd-message");
-    const messageText = snapshot.errorSummary || snapshot.message || "";
+    const retryWatchExpired = snapshot.status === "failed" && !failureWatchActive(snapshot);
+    const messageText = manuallyCompleted
+      ? "已手动标记成功，自动刷新已停止；远端流水线状态未修改。"
+      : retryWatchExpired
+        ? `${snapshot.errorSummary ? `${snapshot.errorSummary}；` : ""}失败后的重跑观察窗口已结束，可手动刷新或标记成功。`
+      : snapshot.errorSummary || snapshot.message || "";
     message.textContent = messageText;
-    message.className = `cicd-message${snapshot.errorSummary ? " is-error" : ""}`;
+    message.className = `cicd-message${!manuallyCompleted && snapshot.errorSummary ? " is-error" : ""}`;
     message.hidden = !messageText;
-    $("#cicd-updated").textContent = formatUpdated(snapshot.updatedAt);
+    $("#cicd-updated").textContent = manuallyCompleted
+      ? formatUpdated(state.manualCompletion.completedAt).replace("更新于", "手动完成于")
+      : formatUpdated(snapshot.updatedAt);
     $("#cicd-open").disabled = !snapshot.url;
+    syncActions(snapshot, manuallyCompleted);
     schedulePolling();
     reportHeight();
   }
@@ -584,8 +787,10 @@
     return result?.structuredContent || result?.result?.structuredContent || result?.mcp_tool_result?.structuredContent || null;
   }
 
-  async function refresh() {
-    if (state.refreshing || !state.snapshot?.monitor) return;
+  async function refresh({ force = false } = {}) {
+    if (state.refreshing || !state.snapshot?.monitor || isManuallyCompleted()) return;
+    if (!force && !shouldAutoPoll()) return;
+    const refreshEpoch = state.refreshEpoch;
     state.refreshing = true;
     $("#cicd-card").setAttribute("aria-busy", "true");
     $("#cicd-refresh").classList.add("is-loading");
@@ -595,9 +800,11 @@
       const result = await window.openai.callTool("get_cicd_run_status", state.snapshot.monitor);
       const payload = extractPayload(result);
       if (!payload) throw new Error("流水线状态响应为空。");
+      if (refreshEpoch !== state.refreshEpoch || isManuallyCompleted()) return;
       state.failures = 0;
       render(payload);
     } catch (error) {
+      if (refreshEpoch !== state.refreshEpoch || isManuallyCompleted()) return;
       state.failures += 1;
       const message = $("#cicd-message");
       message.textContent = error?.message || String(error);
@@ -613,18 +820,47 @@
       state.refreshing = false;
       $("#cicd-card").removeAttribute("aria-busy");
       $("#cicd-refresh").classList.remove("is-loading");
-      $("#cicd-refresh").disabled = false;
+      syncActions(state.snapshot, isManuallyCompleted());
     }
   }
 
   function schedulePolling() {
     if (state.timer) clearTimeout(state.timer);
     state.timer = null;
-    if (!state.snapshot || terminalStatuses.has(state.snapshot.status) || document.hidden || state.failures >= 3) return;
-    state.timer = setTimeout(() => void refresh(), 7000);
+    if (!shouldAutoPoll() || document.hidden || state.failures >= 3) return;
+    const delay = state.snapshot.status === "failed" ? 15000 : 7000;
+    state.timer = setTimeout(() => void refresh(), delay);
   }
 
-  $("#cicd-refresh").addEventListener("click", () => void refresh());
+  $("#cicd-manual-success").addEventListener("click", () => {
+    const snapshot = state.snapshot;
+    if (!snapshot) return;
+    if (state.timer) clearTimeout(state.timer);
+    state.timer = null;
+    state.refreshEpoch += 1;
+    if (isManuallyCompleted(snapshot)) {
+      state.manualCompletion = null;
+      persistWidgetState();
+      render(snapshot);
+      void refresh({ force: true });
+      return;
+    }
+    state.manualCompletion = {
+      monitorKey: monitorKey(snapshot),
+      completedAt: new Date().toISOString()
+    };
+    state.failureWatch = null;
+    persistWidgetState();
+    render(snapshot);
+  });
+
+  $("#cicd-refresh").addEventListener("click", () => {
+    if (state.providerCompletion?.monitorKey === monitorKey(state.snapshot)) {
+      state.providerCompletion = null;
+      persistWidgetState();
+    }
+    void refresh({ force: true });
+  });
   $("#cicd-open").addEventListener("click", async () => {
     const href = state.snapshot?.url;
     if (!href) return;
@@ -644,7 +880,7 @@
     if (document.hidden) {
       if (state.timer) clearTimeout(state.timer);
       state.timer = null;
-    } else if (state.snapshot && !terminalStatuses.has(state.snapshot.status)) {
+    } else if (shouldAutoPoll()) {
       void refresh();
     }
   });
