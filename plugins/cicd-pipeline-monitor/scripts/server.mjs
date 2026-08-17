@@ -1,8 +1,20 @@
 #!/usr/bin/env node
 
-import { basename, dirname, isAbsolute, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { readFileSync, realpathSync, statSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  renameSync,
+  statSync,
+  unlinkSync,
+  writeFileSync
+} from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
+import { homedir } from "node:os";
 import { spawnSync } from "node:child_process";
 import readline from "node:readline";
 
@@ -12,6 +24,13 @@ const TEMPLATE_BASE_URI = "ui://cicd-pipeline-monitor/pipeline-monitor.html";
 const TERMINAL_STATUSES = new Set(["success", "failed", "cancelled", "skipped"]);
 const GH_COMMAND = process.env.CICD_PIPELINE_MONITOR_GH_COMMAND || "gh";
 const GLAB_COMMAND = process.env.CICD_PIPELINE_MONITOR_GLAB_COMMAND || "glab";
+const STATE_SCHEMA_VERSION = 1;
+const STATE_RETENTION_MILLISECONDS = 180 * 24 * 60 * 60 * 1000;
+const STATE_MAX_FILES = 256;
+const STATE_MAX_FILE_BYTES = 2 * 1024 * 1024;
+const STATE_DIR = resolve(
+  process.env.CICD_PIPELINE_MONITOR_STATE_DIR || join(homedir(), ".codex/state/cicd-pipeline-monitor")
+);
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const templateHtml = readFileSync(resolve(scriptDir, "../assets/pipeline-monitor.html"), "utf8");
 
@@ -488,6 +507,206 @@ function monitorLocator(repo, input, extra = {}) {
   return Object.fromEntries(Object.entries(locator).filter(([, value]) => value !== "" && value !== undefined && value !== null));
 }
 
+function exactMonitorIdentity(repo, id) {
+  if (!id) return null;
+  return {
+    schemaVersion: STATE_SCHEMA_VERSION,
+    provider: repo.provider,
+    host: repo.host,
+    repository: repo.projectPath,
+    kind: repo.provider === "github" ? "github-run" : "gitlab-pipeline",
+    id: String(id)
+  };
+}
+
+function triggeredMonitorIdentity(repo, input = {}) {
+  const triggeredAt = isoDate(input.triggeredAt);
+  const workflow = String(input.workflow || (repo.provider === "gitlab" ? "gitlab-pipeline" : "")).trim();
+  const ref = String(input.ref || "").trim();
+  if (!triggeredAt || !workflow || !ref) return null;
+  return {
+    schemaVersion: STATE_SCHEMA_VERSION,
+    provider: repo.provider,
+    host: repo.host,
+    repository: repo.projectPath,
+    kind: "triggered-run",
+    triggeredAt,
+    workflow,
+    ref
+  };
+}
+
+function monitorIdentityKey(identity) {
+  return JSON.stringify(identity);
+}
+
+function monitorStatePath(identity) {
+  const digest = createHash("sha256").update(monitorIdentityKey(identity)).digest("hex");
+  return join(STATE_DIR, `${digest}.json`);
+}
+
+function uniqueMonitorIdentities(identities) {
+  const seen = new Set();
+  return identities.filter((identity) => {
+    if (!identity) return false;
+    const key = monitorIdentityKey(identity);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function lookupMonitorIdentities(repo, input = {}) {
+  const exactId = repo.provider === "github" ? input.runId : input.pipelineId;
+  return uniqueMonitorIdentities([
+    exactMonitorIdentity(repo, exactId),
+    triggeredMonitorIdentity(repo, input)
+  ]);
+}
+
+function snapshotMonitorIdentities(repo, input, snapshot) {
+  const exactId = repo.provider === "github" ? snapshot.runId : snapshot.pipelineId;
+  const triggerInput = {
+    ...input,
+    triggeredAt: input.triggeredAt || snapshot.monitor?.triggeredAt,
+    workflow: input.workflow || snapshot.monitor?.workflow,
+    ref: input.ref || snapshot.ref || snapshot.monitor?.ref
+  };
+  return uniqueMonitorIdentities([
+    exactMonitorIdentity(repo, exactId),
+    triggeredMonitorIdentity(repo, triggerInput)
+  ]);
+}
+
+function ensureStateDirectory() {
+  mkdirSync(STATE_DIR, { recursive: true, mode: 0o700 });
+  chmodSync(STATE_DIR, 0o700);
+}
+
+function writeMonitorState(identity, snapshot) {
+  ensureStateDirectory();
+  const destination = monitorStatePath(identity);
+  const temporary = join(STATE_DIR, `.${basename(destination)}.${process.pid}.${randomUUID()}.tmp`);
+  const record = {
+    schemaVersion: STATE_SCHEMA_VERSION,
+    recordedAt: new Date().toISOString(),
+    identity,
+    snapshot
+  };
+  try {
+    writeFileSync(temporary, `${JSON.stringify(record)}\n`, { encoding: "utf8", flag: "wx", mode: 0o600 });
+    chmodSync(temporary, 0o600);
+    renameSync(temporary, destination);
+    chmodSync(destination, 0o600);
+  } finally {
+    try {
+      unlinkSync(temporary);
+    } catch {
+      // The atomic rename already consumed the temporary file in the normal path.
+    }
+  }
+}
+
+function cleanupMonitorState() {
+  let entries;
+  try {
+    entries = readdirSync(STATE_DIR, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+      .map((entry) => {
+        const path = join(STATE_DIR, entry.name);
+        return { path, modifiedAt: statSync(path).mtimeMs };
+      });
+  } catch {
+    return;
+  }
+
+  const cutoff = Date.now() - STATE_RETENTION_MILLISECONDS;
+  const retained = [];
+  for (const entry of entries) {
+    if (entry.modifiedAt < cutoff) {
+      try {
+        unlinkSync(entry.path);
+      } catch {
+        // A concurrent server may already have removed this plugin-owned state file.
+      }
+    } else {
+      retained.push(entry);
+    }
+  }
+  retained.sort((left, right) => right.modifiedAt - left.modifiedAt);
+  for (const entry of retained.slice(STATE_MAX_FILES)) {
+    try {
+      unlinkSync(entry.path);
+    } catch {
+      // A concurrent server may already have removed this plugin-owned state file.
+    }
+  }
+}
+
+function persistProviderSuccess(repo, input, snapshot) {
+  if (snapshot?.status !== "success") return snapshot;
+  const identities = snapshotMonitorIdentities(repo, input, snapshot);
+  if (!identities.length) return snapshot;
+  const persistedSnapshot = JSON.parse(JSON.stringify({
+    ...snapshot,
+    status: "success",
+    errorSummary: ""
+  }));
+  try {
+    for (const identity of identities) writeMonitorState(identity, persistedSnapshot);
+    cleanupMonitorState();
+  } catch (error) {
+    process.stderr.write(`[${SERVER_NAME}] 无法持久化成功状态：${redactText(error?.message || error)}\n`);
+  }
+  return snapshot;
+}
+
+function readMonitorState(identity) {
+  const path = monitorStatePath(identity);
+  try {
+    const metadata = statSync(path);
+    if (!metadata.isFile() || metadata.size > STATE_MAX_FILE_BYTES || metadata.mtimeMs < Date.now() - STATE_RETENTION_MILLISECONDS) {
+      return null;
+    }
+    const record = JSON.parse(readFileSync(path, "utf8"));
+    if (record?.schemaVersion !== STATE_SCHEMA_VERSION) return null;
+    if (monitorIdentityKey(record.identity) !== monitorIdentityKey(identity)) return null;
+    if (record.snapshot?.status !== "success") return null;
+    if (record.snapshot?.provider !== identity.provider) return null;
+    if (record.snapshot?.host !== identity.host || record.snapshot?.repository !== identity.repository) return null;
+    if (identity.kind === "github-run" && String(record.snapshot.runId || "") !== identity.id) return null;
+    if (identity.kind === "gitlab-pipeline" && String(record.snapshot.pipelineId || "") !== identity.id) return null;
+    return record;
+  } catch {
+    return null;
+  }
+}
+
+function restoreProviderSuccess(repo, input) {
+  for (const identity of lookupMonitorIdentities(repo, input)) {
+    const record = readMonitorState(identity);
+    if (!record) continue;
+    const snapshot = record.snapshot;
+    const monitor = {
+      ...(snapshot.monitor || {}),
+      repoPath: repo.repoRoot,
+      provider: repo.provider
+    };
+    if (snapshot.runId) monitor.runId = snapshot.runId;
+    if (snapshot.pipelineId) monitor.pipelineId = snapshot.pipelineId;
+    return {
+      ...snapshot,
+      status: "success",
+      rawStatus: "persisted_success",
+      environment: input.environment || snapshot.environment || "",
+      errorSummary: "",
+      message: "已从本机持久记录恢复真实成功结果。",
+      monitor
+    };
+  }
+  return null;
+}
+
 function normalizeGithubRun(repo, run, input = {}) {
   const jobs = Array.isArray(run.jobs) ? run.jobs.map(normalizeGithubJob) : [];
   const status = normalizeGithubStatus(run.status, run.conclusion);
@@ -720,13 +939,16 @@ function getGitlabPipeline(repo, input) {
 
 function getRunStatus(input) {
   const repo = discoverRepository(input.repoPath, input.provider);
+  const persisted = restoreProviderSuccess(repo, input);
+  if (persisted) return persisted;
   checkAuth(repo);
   if (repo.provider === "github") {
     const run = input.runId ? getGithubRun(repo, input) : listGithubRuns(repo, input, { includeJobs: true });
-    return run ? normalizeGithubRun(repo, run, input) : pendingGithubRun(repo, input);
+    const snapshot = run ? normalizeGithubRun(repo, run, input) : pendingGithubRun(repo, input);
+    return persistProviderSuccess(repo, input, snapshot);
   }
   const { pipeline, jobs } = getGitlabPipeline(repo, input);
-  return normalizeGitlabPipeline(repo, pipeline, jobs, input);
+  return persistProviderSuccess(repo, input, normalizeGitlabPipeline(repo, pipeline, jobs, input));
 }
 
 function triggerGithubRun(repo, input) {
@@ -751,7 +973,8 @@ function triggerGithubRun(repo, input) {
     triggeredAt
   };
   const run = listGithubRuns(repo, monitorInput, { includeJobs: true });
-  return run ? normalizeGithubRun(repo, run, monitorInput) : pendingGithubRun(repo, monitorInput);
+  const snapshot = run ? normalizeGithubRun(repo, run, monitorInput) : pendingGithubRun(repo, monitorInput);
+  return persistProviderSuccess(repo, monitorInput, snapshot);
 }
 
 function triggerGitlabRun(repo, input) {
@@ -780,7 +1003,7 @@ function triggerGitlabRun(repo, input) {
     triggeredAt
   };
   const jobs = getGitlabJobs(repo, monitorInput.pipelineId);
-  return normalizeGitlabPipeline(repo, pipeline, jobs, monitorInput);
+  return persistProviderSuccess(repo, monitorInput, normalizeGitlabPipeline(repo, pipeline, jobs, monitorInput));
 }
 
 function triggerRun(input) {
@@ -792,14 +1015,16 @@ function triggerRun(input) {
 
 function openMonitor(input) {
   const repo = discoverRepository(input.repoPath, input.provider);
+  const persisted = restoreProviderSuccess(repo, input);
+  if (persisted) return persisted;
   checkAuth(repo);
   if (repo.provider === "github") {
     const run = input.runId ? getGithubRun(repo, input) : listGithubRuns(repo, input, { includeJobs: true });
     if (!run) throw new Error("没有找到匹配的 GitHub Actions run。");
-    return normalizeGithubRun(repo, run, input);
+    return persistProviderSuccess(repo, input, normalizeGithubRun(repo, run, input));
   }
   const { pipeline, jobs } = getGitlabPipeline(repo, input);
-  return normalizeGitlabPipeline(repo, pipeline, jobs, input);
+  return persistProviderSuccess(repo, input, normalizeGitlabPipeline(repo, pipeline, jobs, input));
 }
 
 function safeOrigin(value) {

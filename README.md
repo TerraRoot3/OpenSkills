@@ -91,4 +91,4 @@ codex plugin marketplace add TerraRoot3/OpenSkills --ref main
 codex plugin add cicd-pipeline-monitor@openskills
 ```
 
-Start a new Codex task after installation so the plugin's Skill and MCP tools are discovered.
+Start a new Codex task after installation or update so the plugin's versioned Skill path and MCP tools are refreshed together. Plugin Skills are loaded from Codex's plugin cache; do not copy or symlink them into `~/.codex/skills`.

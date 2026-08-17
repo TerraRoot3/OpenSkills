@@ -1,11 +1,13 @@
 ---
 name: cicd-pipeline-monitor
-description: Trigger and monitor GitHub Actions or GitLab CI/CD pipelines in a compact live Codex conversation card. Use when the user asks to release or deploy to a test, staging, or production environment; inspect available workflows; monitor a current or recent pipeline; refresh deployment status; or open the provider run in the system browser. Reuse the current local gh or glab login without storing credentials.
+description: Trigger and monitor GitHub Actions or GitLab CI/CD pipelines in a compact live Codex conversation card. Use when the user asks to release or deploy to a test, staging, or production environment; inspect available workflows; monitor a current or recent pipeline; refresh deployment status; or open the provider run in the system browser. Reuse the current local gh or glab login without storing credentials. This Skill is plugin-distributed; load it from the path supplied by the current Codex task instead of assuming a standalone ~/.codex/skills location.
 ---
 
 # CI/CD Pipeline Monitor
 
 Use the plugin tools for release discovery, triggering, and live status cards.
+
+Treat the Skill path injected by Codex as canonical. Plugin installs live in a versioned cache and may be namespace-prefixed; do not construct or maintain a duplicate path under `~/.codex/skills`.
 
 ## Workflow
 

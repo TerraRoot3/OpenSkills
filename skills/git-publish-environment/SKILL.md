@@ -68,6 +68,12 @@ For the exact PagePop remote fingerprint `github:github.com/pagepop/pagepop-agen
 
 When an exact-SHA PR/MR already exists, the script reuses it and does not require new content. When checks or review remain pending, exit code `4` means the PR/MR is valid but production is waiting. Report its URL, use `cicd-pipeline-monitor` when available, and rerun the same production command after merge. Do not create a duplicate PR/MR or tag early.
 
+## CI/CD monitor handoff
+
+Resolve `cicd-pipeline-monitor` from the current task's Available Skills entry and read the exact path supplied by Codex. The Skill is distributed by a plugin, so its visible name may be namespace-prefixed and its file normally lives in a versioned plugin cache. Never construct `~/.codex/skills/cicd-pipeline-monitor/SKILL.md`, search only the standalone Skill root, or create a duplicate copy or symlink there.
+
+If the injected path no longer exists because the plugin was installed, updated, or moved between marketplaces after the task began, run `codex plugin list` to identify the one enabled marketplace and version, then read that exact installed cache entry. Do not choose among caches by filename sorting. Finish the current monitoring work with the enabled plugin and tell the user that a new Codex task is the reliable boundary for refreshing future Skill paths.
+
 ## Safety contract
 
 - Never use force push, destructive reset, automatic conflict guesses, admin merge, check bypass, or direct mainline push.

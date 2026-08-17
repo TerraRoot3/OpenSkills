@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import assert from "node:assert/strict";
-import { chmodSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
@@ -10,6 +10,7 @@ import readline from "node:readline";
 const pluginRoot = resolve(import.meta.dirname, "..");
 const serverPath = resolve(pluginRoot, "scripts/server.mjs");
 const tempRoot = mkdtempSync(join(tmpdir(), "cicd-monitor-test-"));
+const stateDir = join(tempRoot, "state");
 
 function run(command, args, cwd) {
   const result = spawnSync(command, args, { cwd, encoding: "utf8" });
@@ -141,6 +142,7 @@ class RpcClient {
         ...process.env,
         CICD_PIPELINE_MONITOR_GH_COMMAND: fakeGhPath,
         CICD_PIPELINE_MONITOR_GLAB_COMMAND: fakeGlabPath,
+        CICD_PIPELINE_MONITOR_STATE_DIR: stateDir,
         ...env
       }
     });
@@ -218,7 +220,16 @@ try {
   assert.match(ghTriggered._meta.ui.resourceUri, /redirectOrigin=https%3A%2F%2Fgithub\.com/);
 
   for (const [runId, expected] of [["101", "success"], ["102", "failed"], ["103", "cancelled"], ["104", "skipped"]]) {
-    const status = await client.tool("get_cicd_run_status", { repoPath: githubRepo, provider: "github", runId, ref: "main" });
+    const status = await client.tool("get_cicd_run_status", {
+      repoPath: githubRepo,
+      provider: "github",
+      runId,
+      ref: "main",
+      ...(runId === "101" ? {
+        workflow: ".github/workflows/release.yml",
+        triggeredAt: "2026-08-09T00:00:00Z"
+      } : {})
+    });
     assert.equal(status.structuredContent.status, expected);
   }
 
@@ -241,11 +252,84 @@ try {
   assert.match(glTriggered._meta.ui.resourceUri, /gitlab\.example\.test/);
 
   for (const [pipelineId, expected] of [["200", "running"], ["201", "success"], ["202", "failed"], ["203", "cancelled"]]) {
-    const status = await client.tool("get_cicd_run_status", { repoPath: gitlabRepo, provider: "gitlab", pipelineId, ref: "main" });
+    const status = await client.tool("get_cicd_run_status", {
+      repoPath: gitlabRepo,
+      provider: "gitlab",
+      pipelineId,
+      ref: "main",
+      ...(pipelineId === "201" ? { triggeredAt: "2026-08-09T00:00:00Z" } : {})
+    });
     assert.equal(status.structuredContent.status, expected);
   }
   const emptyJobs = await client.tool("get_cicd_run_status", { repoPath: gitlabRepo, provider: "gitlab", pipelineId: "204", ref: "main" });
   assert.equal(emptyJobs.structuredContent.jobs.length, 0);
+
+  const stateFiles = readdirSync(stateDir).filter((name) => name.endsWith(".json"));
+  assert.ok(stateFiles.length >= 4);
+  assert.equal(statSync(stateDir).mode & 0o777, 0o700);
+  for (const name of stateFiles) assert.equal(statSync(join(stateDir, name)).mode & 0o777, 0o600);
+
+  const restartedClient = new RpcClient({ FAKE_AUTH_FAIL: "1" });
+  try {
+    const restoredGithub = await restartedClient.tool("get_cicd_run_status", {
+      repoPath: githubRepo,
+      provider: "github",
+      runId: "101",
+      ref: "main"
+    });
+    assert.equal(restoredGithub.isError, undefined);
+    assert.equal(restoredGithub.structuredContent.status, "success");
+    assert.equal(restoredGithub.structuredContent.rawStatus, "persisted_success");
+    assert.match(restoredGithub.structuredContent.message, /本机持久记录/);
+
+    const reopenedGithub = await restartedClient.tool("open_cicd_monitor", {
+      repoPath: githubRepo,
+      provider: "github",
+      runId: "101",
+      ref: "main"
+    });
+    assert.equal(reopenedGithub.structuredContent.rawStatus, "persisted_success");
+
+    const restoredGithubAlias = await restartedClient.tool("open_cicd_monitor", {
+      repoPath: githubRepo,
+      provider: "github",
+      workflow: ".github/workflows/release.yml",
+      ref: "main",
+      triggeredAt: "2026-08-09T00:00:00Z"
+    });
+    assert.equal(restoredGithubAlias.structuredContent.runId, "101");
+    assert.equal(restoredGithubAlias.structuredContent.rawStatus, "persisted_success");
+
+    const uncachedGithub = await restartedClient.tool("get_cicd_run_status", {
+      repoPath: githubRepo,
+      provider: "github",
+      runId: "106",
+      ref: "main"
+    });
+    assert.equal(uncachedGithub.isError, true);
+    assert.match(uncachedGithub.content[0].text, /not logged in/);
+
+    const restoredGitlab = await restartedClient.tool("get_cicd_run_status", {
+      repoPath: gitlabRepo,
+      provider: "gitlab",
+      pipelineId: "201",
+      ref: "main"
+    });
+    assert.equal(restoredGitlab.isError, undefined);
+    assert.equal(restoredGitlab.structuredContent.status, "success");
+    assert.equal(restoredGitlab.structuredContent.rawStatus, "persisted_success");
+
+    const restoredGitlabAlias = await restartedClient.tool("open_cicd_monitor", {
+      repoPath: gitlabRepo,
+      provider: "gitlab",
+      ref: "main",
+      triggeredAt: "2026-08-09T00:00:00Z"
+    });
+    assert.equal(restoredGitlabAlias.structuredContent.pipelineId, "201");
+    assert.equal(restoredGitlabAlias.structuredContent.rawStatus, "persisted_success");
+  } finally {
+    restartedClient.close();
+  }
 
   const resourceUri = `${"ui://cicd-pipeline-monitor/pipeline-monitor.html"}?redirectOrigin=${encodeURIComponent("https://gitlab.example.test")}`;
   const resource = await client.call("resources/read", { uri: resourceUri });
@@ -259,7 +343,8 @@ try {
   assert.ok(resource.result.contents[0].text.includes("providerCompletion"));
   assert.ok(resource.result.contents[0].text.includes("snapshot.monitor?.triggeredAt || snapshot.runId"));
   assert.ok(resource.result.contents[0].text.includes("failureWatchMilliseconds = 10 * 60 * 1000"));
-  assert.ok(resource.result.contents[0].text.includes("已从卡片持久状态恢复真实成功结果"));
+  assert.ok(resource.result.contents[0].text.includes("已从当前卡片的临时状态恢复真实成功结果"));
+  assert.ok(!resource.result.contents[0].text.includes("已从卡片持久状态恢复真实成功结果"));
   assert.ok(resource.result.contents[0].text.includes("void refresh({ force: true })"));
 
   const missingConfirmation = await client.tool("trigger_cicd_run", {
