@@ -12,10 +12,10 @@ Treat the Skill path injected by Codex as canonical. Plugin installs live in a v
 ## Workflow
 
 1. Call `list_cicd_targets` with the absolute repository path before choosing a pipeline. Use its exact provider, target identifier, default ref, and current ref values.
-2. For monitoring only, call `open_cicd_monitor`. Supply an exact run or pipeline ID when known; otherwise supply the workflow and ref filters needed to select the latest matching run.
+2. For monitoring only, call `open_cicd_monitor` once, and only when this task has not already rendered a card for that run or pipeline. Supply an exact run or pipeline ID when known; otherwise supply the workflow and ref filters needed to select the latest matching run. Do not call it again merely because the card is still mounting or a refresh is needed.
 3. Before calling `trigger_cicd_run`, state the provider, repository, workflow or pipeline, ref, environment, and input or variable names. Obtain explicit user confirmation for the complete target, always for production, then pass `confirmed: true`. Never pass the confirmation flag before that preview is confirmed.
-4. Call `trigger_cicd_run` once. Do not retry a trigger after an uncertain response; inspect the latest matching run first to avoid a duplicate deployment.
-5. Return the rendered monitor card. The card refreshes queued and running runs automatically. After a failure it watches the same run or pipeline for a bounded retry window so provider reruns can progress from failure to success; it stops after success, cancellation, skip, or expiration of that window. A real provider success is persisted so reopening the card does not restart polling. The user can choose `标记成功` to stop this card locally; `恢复监控` resumes provider reads.
+4. Call `trigger_cicd_run` once. Its successful response already renders the only monitor card needed for that run, so never follow it with `open_cicd_monitor` for the same run. Do not retry a trigger after an uncertain response; inspect the latest matching run with the data-only `get_cicd_run_status` tool first to avoid a duplicate deployment or card.
+5. Return the rendered monitor card without mounting another one. The card refreshes queued and running runs automatically through `get_cicd_run_status`. After a failure it watches the same run or pipeline for a bounded retry window so provider reruns can progress from failure to success; it stops after success, cancellation, skip, or expiration of that window. A real provider success is persisted so reopening the card does not restart polling. The user can choose `标记成功` to stop this card locally; `恢复监控` resumes provider reads.
 
 ## Safety boundaries
 
@@ -32,8 +32,8 @@ Treat the Skill path injected by Codex as canonical. Plugin installs live in a v
 ## Tool selection
 
 - `list_cicd_targets`: Read provider metadata and available GitHub workflows or the GitLab pipeline target.
-- `trigger_cicd_run`: Trigger one confirmed workflow or pipeline and render its monitor card.
-- `open_cicd_monitor`: Render an existing or latest matching run without triggering anything.
-- `get_cicd_run_status`: Read unified run and job status. The conversation card calls this automatically; call it directly only when a text status is needed.
+- `trigger_cicd_run`: Trigger one confirmed workflow or pipeline and render its sole monitor card; do not pair it with `open_cicd_monitor`.
+- `open_cicd_monitor`: Render an existing or latest matching run once when this task has no card for it; never use it as a refresh operation.
+- `get_cicd_run_status`: Read unified run and job status without rendering a new card. The conversation card calls this automatically; call it directly only when a text status or a data-only uncertainty check is needed.
 
 If the remote hostname is unsupported or authentication is unavailable, report the exact host and ask the user to configure `gh` or `glab` outside the plugin. Do not fall back to embedded access keys.

@@ -194,10 +194,16 @@ const client = new RpcClient();
 try {
   const initialized = await client.call("initialize", { protocolVersion: "2025-06-18" });
   assert.equal(initialized.result.serverInfo.name, "cicd-pipeline-monitor");
+  assert.match(initialized.result.instructions, /at most one CI\/CD monitor card/);
+  assert.match(initialized.result.instructions, /never follow it with open_cicd_monitor/);
   const tools = await client.call("tools/list");
   assert.deepEqual(tools.result.tools.map((tool) => tool.name), [
     "list_cicd_targets", "trigger_cicd_run", "open_cicd_monitor", "get_cicd_run_status"
   ]);
+  const toolsByName = Object.fromEntries(tools.result.tools.map((tool) => [tool.name, tool]));
+  assert.match(toolsByName.trigger_cicd_run.description, /never call open_cicd_monitor/);
+  assert.match(toolsByName.open_cicd_monitor.description, /Call once per monitoring request/);
+  assert.match(toolsByName.get_cicd_run_status.description, /without mounting a new card/);
 
   const ghTargets = await client.tool("list_cicd_targets", { repoPath: githubRepo });
   assert.equal(ghTargets.isError, undefined);
@@ -346,6 +352,11 @@ try {
   assert.ok(resource.result.contents[0].text.includes("已从当前卡片的临时状态恢复真实成功结果"));
   assert.ok(!resource.result.contents[0].text.includes("已从卡片持久状态恢复真实成功结果"));
   assert.ok(resource.result.contents[0].text.includes("void refresh({ force: true })"));
+  assert.ok(resource.result.contents[0].text.includes('id="cicd-jobs-track"'));
+  assert.ok(resource.result.contents[0].text.includes("function selectJobFocusIndex"));
+  assert.ok(resource.result.contents[0].text.includes("requestAnimationFrame(positionJobTrack)"));
+  assert.ok(resource.result.contents[0].text.includes("transition: transform 360ms"));
+  assert.ok(!resource.result.contents[0].text.includes("jobs.slice(0, 4)"));
 
   const missingConfirmation = await client.tool("trigger_cicd_run", {
     repoPath: githubRepo,

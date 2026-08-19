@@ -45,7 +45,9 @@
     <div class="cicd-progress-track" aria-hidden="true">
       <span id="cicd-progress-bar" class="cicd-progress-bar"></span>
     </div>
-    <div id="cicd-jobs" class="cicd-jobs"></div>
+    <div id="cicd-jobs" class="cicd-jobs">
+      <div id="cicd-jobs-track" class="cicd-jobs-track"></div>
+    </div>
     <p id="cicd-message" class="cicd-message" hidden></p>
   </section>
 
@@ -309,16 +311,25 @@
   .cicd-progress-bar.is-skipped { background: var(--cicd-gray); }
 
   .cicd-jobs {
-    display: flex;
-    align-items: center;
-    gap: 5px;
     min-height: 25px;
     margin-top: 7px;
     overflow: hidden;
   }
 
+  .cicd-jobs-track {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    width: max-content;
+    min-width: 100%;
+    transform: translate3d(0, 0, 0);
+    transition: transform 360ms cubic-bezier(.22, .8, .3, 1);
+    will-change: transform;
+  }
+
   .cicd-job {
     display: inline-flex;
+    flex: 0 0 auto;
     align-items: center;
     gap: 5px;
     min-width: 0;
@@ -347,8 +358,6 @@
   .cicd-job.is-running .cicd-job-dot { background: var(--cicd-blue); animation: cicd-pulse 1.45s ease-in-out infinite; }
   .cicd-job.is-success .cicd-job-dot { background: var(--cicd-green); }
   .cicd-job.is-failed .cicd-job-dot { background: var(--cicd-red); }
-
-  .cicd-job-more { color: var(--cicd-subtle); font-size: 11px; white-space: nowrap; }
 
   .cicd-jobs-empty {
     color: var(--cicd-subtle);
@@ -478,6 +487,7 @@
     failures: 0,
     lastHeight: 0,
     refreshEpoch: 0,
+    jobFocusIndex: 0,
     lastPersistedState: "",
     manualCompletion: savedManualCompletion && typeof savedManualCompletion.monitorKey === "string"
       ? {
@@ -697,20 +707,44 @@
     }
   }
 
-  function renderJobs(jobs) {
+  function selectJobFocusIndex(jobs) {
+    const runningIndex = jobs.findIndex((job) => job.status === "running");
+    if (runningIndex >= 0) return runningIndex;
+    const queuedIndex = jobs.findIndex((job) => job.status === "queued");
+    if (queuedIndex >= 0) return queuedIndex;
+    const failedIndex = jobs.findIndex((job) => job.status === "failed");
+    return failedIndex >= 0 ? failedIndex : Math.max(0, jobs.length - 1);
+  }
+
+  function positionJobTrack() {
     const container = $("#cicd-jobs");
-    container.replaceChildren();
+    const track = $("#cicd-jobs-track");
+    const focus = track?.querySelector(`[data-job-index="${state.jobFocusIndex}"]`);
+    if (!container || !track || !focus) return;
+    const maxOffset = Math.max(0, track.scrollWidth - container.clientWidth);
+    const focusOffset = Math.max(0, focus.offsetLeft);
+    const prioritizesUpcoming = focus.classList.contains("is-running") || focus.classList.contains("is-queued");
+    const offset = prioritizesUpcoming ? focusOffset : Math.min(maxOffset, focusOffset);
+    track.style.transform = `translate3d(${-Math.round(offset)}px, 0, 0)`;
+  }
+
+  function renderJobs(jobs) {
+    const track = $("#cicd-jobs-track");
+    track.replaceChildren();
     if (!jobs.length) {
+      state.jobFocusIndex = 0;
+      track.style.transform = "translate3d(0, 0, 0)";
       const empty = document.createElement("span");
       empty.className = "cicd-jobs-empty";
       empty.textContent = "等待任务信息…";
-      container.appendChild(empty);
+      track.appendChild(empty);
       return;
     }
-    const visible = jobs.slice(0, 4);
-    for (const job of visible) {
+    state.jobFocusIndex = selectJobFocusIndex(jobs);
+    jobs.forEach((job, index) => {
       const item = document.createElement("span");
       item.className = `cicd-job is-${job.status || "unknown"}`;
+      item.dataset.jobIndex = String(index);
       item.title = `${job.stage ? `${job.stage} · ` : ""}${job.name} · ${statusLabels[job.status] || job.rawStatus || "未知"}`;
       const dot = document.createElement("span");
       dot.className = "cicd-job-dot";
@@ -718,14 +752,9 @@
       const name = document.createElement("span");
       name.textContent = job.name || "未命名任务";
       item.append(dot, name);
-      container.appendChild(item);
-    }
-    if (jobs.length > visible.length) {
-      const more = document.createElement("span");
-      more.className = "cicd-job-more";
-      more.textContent = `+${jobs.length - visible.length}`;
-      container.appendChild(more);
-    }
+      track.appendChild(item);
+    });
+    requestAnimationFrame(positionJobTrack);
   }
 
   function render(snapshot) {
@@ -891,7 +920,10 @@
     if (globals.toolOutput) render(globals.toolOutput);
   }, { passive: true });
 
-  if (typeof ResizeObserver === "function") new ResizeObserver(reportHeight).observe($("#cicd-card"));
+  if (typeof ResizeObserver === "function") {
+    new ResizeObserver(reportHeight).observe($("#cicd-card"));
+    new ResizeObserver(positionJobTrack).observe($("#cicd-jobs"));
+  }
   applyTheme(window.openai?.hostContext || {});
   if (window.openai?.toolOutput) render(window.openai.toolOutput);
 })();

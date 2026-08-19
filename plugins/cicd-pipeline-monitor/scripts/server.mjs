@@ -106,7 +106,7 @@ const toolDefinitions = [
   {
     name: "trigger_cicd_run",
     title: "Trigger CI/CD Run",
-    description: "Trigger one explicitly confirmed GitHub Actions workflow_dispatch or GitLab pipeline, then render a live monitor card. Never call speculatively or retry after an uncertain response.",
+    description: "Trigger one explicitly confirmed GitHub Actions workflow_dispatch or GitLab pipeline and render the only live monitor card needed for that run. Call once. A successful result already mounts the monitor, so never call open_cicd_monitor for the same run afterward and never retry this rendering tool after an uncertain response.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -151,7 +151,7 @@ const toolDefinitions = [
   {
     name: "open_cicd_monitor",
     title: "Open CI/CD Monitor",
-    description: "Open a compact live card for an exact or latest matching GitHub Actions run or GitLab pipeline without triggering anything.",
+    description: "Render one compact live card for an existing or latest matching GitHub Actions run or GitLab pipeline without triggering anything. Call once per monitoring request only when no card has already been rendered for that run in the current task. Never call after trigger_cicd_run for the same run, repeat to refresh, or retry merely because the card is not yet visible; the mounted card calls get_cicd_run_status itself.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -175,7 +175,7 @@ const toolDefinitions = [
   {
     name: "get_cicd_run_status",
     title: "Get CI/CD Run Status",
-    description: "Read and normalize one GitHub Actions run or GitLab pipeline plus its jobs. Designed for automatic polling from the monitor card.",
+    description: "Read and normalize one GitHub Actions run or GitLab pipeline plus its jobs without mounting a new card. This is the data-only refresh tool used automatically by the existing monitor card.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -1085,7 +1085,8 @@ async function handleRequest(message) {
       rpcResult(id, {
         protocolVersion: params.protocolVersion || "2025-06-18",
         capabilities: { tools: {}, resources: {} },
-        serverInfo: { name: SERVER_NAME, version: SERVER_VERSION }
+        serverInfo: { name: SERVER_NAME, version: SERVER_VERSION },
+        instructions: "Mount at most one CI/CD monitor card for the same run or pipeline in a task. trigger_cicd_run already returns that card; never follow it with open_cicd_monitor for the same run. Call open_cicd_monitor at most once when attaching to an existing run. Refresh only through the data-only get_cicd_run_status tool, normally from the mounted card itself."
       });
       return;
     }

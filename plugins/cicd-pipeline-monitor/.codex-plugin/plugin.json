@@ -1,6 +1,6 @@
 {
   "name": "cicd-pipeline-monitor",
-  "version": "0.1.0+codex.20260817094742",
+  "version": "0.1.0+codex.20260819072559",
   "description": "Trigger and monitor GitHub Actions or GitLab pipelines in a live Codex conversation card.",
   "author": {
     "name": "Han Baokun"
