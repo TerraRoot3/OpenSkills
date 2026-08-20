@@ -18,7 +18,7 @@
 - Fetch `origin/dev` again before push. Allow a normal push only when the latest remote `dev` is an ancestor of the integration result.
 - Run source `--verify` commands once on the demand branch. Run only separately supplied `--integration-verify` commands on the merged local `dev` checkout.
 - After a verified push, require local and remote `dev` to match, then switch the current workspace back to the demand branch.
-- Do not create a temporary worktree, install or download dependencies, or improvise dependency symlinks/copies during test publication. If existing dependencies cannot run an explicit integration check, stop or rely on the target CI.
+- Do not create a temporary worktree during ordinary test publication. If a repository rule or explicit user decision requires one, seed compatible dependencies from the current workspace under [worktree-dependency-reuse.md](worktree-dependency-reuse.md); never use a directory symlink to the source dependencies or fall back to an online install or image download. Missing offline dependencies are a stop condition.
 
 ## Production
 

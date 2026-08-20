@@ -41,7 +41,7 @@ Enforce the test integration direction `demand branch -> dev`. Never merge, pull
 
 The script uses `git merge-tree` only as a conflict preflight. If a conflict also requires a large mainline decision, it stops on the demand branch before changing local `dev`. Otherwise it performs the merge in the current workspace. On conflict it leaves the current checkout on local `dev` and reports `CONFLICT_MAINLINE_DIVERGENCE`, `STATE_FILE`, and `INTEGRATION_CHECKOUT`; resolve only those integration conflicts, stage the resolutions, and run the exact `resume-test` command. Resume commits and pushes local `dev`, then returns to the demand branch. Never modify the demand branch from `dev`.
 
-Do not create a temporary worktree for ordinary test publication, and do not install or download dependencies during publication. The current workspace reuses its existing dependencies. If an explicit `--integration-verify` cannot run with them, stop and use an already-provisioned environment or the target CI; do not improvise symlinks, copies, or package installation. Keep the default command timeout for ordinary publication unless the repository's known focused check genuinely requires a different bound.
+Do not create a temporary worktree for ordinary test publication, and do not install or download dependencies during publication. The current workspace reuses its existing dependencies. If another repository rule or explicit user decision genuinely requires a worktree, read [references/worktree-dependency-reuse.md](references/worktree-dependency-reuse.md) before creating it and seed compatible dependencies from the current workspace before verification. Never point the new worktree at the source `node_modules` with a directory symlink, and never fall back to an online install or image download. Keep the default command timeout for ordinary publication unless the repository's known focused check genuinely requires a different bound.
 
 ## Publish production
 
@@ -85,6 +85,7 @@ If the injected path no longer exists because the plugin was installed, updated,
 - On a test merge conflict, refresh and report the exact demand/mainline divergence without automatically changing the demand branch.
 - Treat local `dev` as a mirror of the fetched remote environment branch: stop if another worktree uses it; otherwise align it exactly to `origin/dev` before merging the demand branch.
 - Run `--verify` once on the demand branch. Run only separately supplied `--integration-verify` commands on the merged local `dev` tree.
+- If an exceptional worktree is explicitly required, reuse dependencies only under the manifest, lockfile, runtime, platform, and symlink checks in [references/worktree-dependency-reuse.md](references/worktree-dependency-reuse.md); missing offline dependencies are a stop condition, not authorization to download.
 - Stop if the remote source branch is ahead or diverged.
 - Verify source, environment branch, mainline, and tag SHAs against the remote after writes.
 - Stop before tagging if mainline advanced after the PR/MR merge; do not include unrelated later commits silently.
