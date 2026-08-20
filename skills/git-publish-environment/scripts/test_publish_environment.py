@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -113,6 +114,35 @@ class PublishEnvironmentTests(unittest.TestCase):
             PUBLISH.ensure_test_branch("main", "feature/test")
         with self.assertRaises(PUBLISH.PublishError):
             PUBLISH.ensure_test_branch("feature/test", "feature/test")
+
+    def test_test_publish_preserves_only_explicit_untracked_subtree(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = RepoFixture(Path(temp))
+            output = fixture.repo / "outputs" / "result.txt"
+            output.parent.mkdir()
+            output.write_text("keep\n", encoding="utf-8")
+
+            result = run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "test",
+                    "--repo",
+                    str(fixture.repo),
+                    "--allow-untracked-path",
+                    "outputs",
+                ],
+                cwd=fixture.repo,
+            )
+
+            self.assertIn("preserving explicitly allowed", result.stdout)
+            self.assertEqual(output.read_text(encoding="utf-8"), "keep\n")
+            self.assertEqual(
+                git_output(fixture.repo, "branch", "--show-current"),
+                "feature/test",
+            )
+            with self.assertRaises(PUBLISH.PublishError):
+                PUBLISH.normalize_allowed_untracked_paths(["../outputs"])
 
     def test_forge_identity_uses_repository_owner_mapping(self) -> None:
         terra = PUBLISH.RemoteInfo(
@@ -561,7 +591,7 @@ class PublishEnvironmentTests(unittest.TestCase):
             self.assertIn("timed out", str(raised.exception))
             self.assertFalse(marker.exists())
 
-    def test_test_publish_preserves_conflict_worktree_and_resumes(self) -> None:
+    def test_test_publish_preserves_local_dev_conflict_and_resumes(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             fixture = RepoFixture(Path(temp))
             (fixture.repo / "README.md").write_text(
@@ -581,8 +611,20 @@ class PublishEnvironmentTests(unittest.TestCase):
             git(updater, "commit", "-m", "chore: change dev readme")
             git(updater, "push", "origin", "dev")
 
+            integration_marker = Path(temp) / "integration-verify-count"
+            integration_verify = (
+                f"printf i >> {shlex.quote(str(integration_marker))}"
+            )
             first = run(
-                [sys.executable, str(SCRIPT), "test", "--repo", str(fixture.repo)],
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "test",
+                    "--repo",
+                    str(fixture.repo),
+                    "--integration-verify",
+                    integration_verify,
+                ],
                 cwd=fixture.repo,
                 check=False,
             )
@@ -598,11 +640,15 @@ class PublishEnvironmentTests(unittest.TestCase):
             self.assertEqual(state["mainline_conflict_diagnosis"]["status"], "checked")
             self.assertFalse(state["mainline_conflict_diagnosis"]["is_large"])
             self.assertIn(
-                "isolated worktree",
+                "current local dev checkout",
                 state["mainline_conflict_diagnosis"]["recommendation"],
             )
-            worktree = Path(state["worktree"])
-            self.assertTrue(worktree.is_dir())
+            self.assertEqual(
+                git_output(fixture.repo, "branch", "--show-current"),
+                "dev",
+            )
+            self.assertFalse(integration_marker.exists())
+            self.assertIn("--integration-verify", first.stdout)
             resume_args = [
                 sys.executable,
                 str(SCRIPT),
@@ -619,6 +665,8 @@ class PublishEnvironmentTests(unittest.TestCase):
                 "feature/test",
                 "--source-sha",
                 feature_sha,
+                "--integration-verify",
+                integration_verify,
             ]
 
             state["verify"] = ["touch should-not-run"]
@@ -626,16 +674,19 @@ class PublishEnvironmentTests(unittest.TestCase):
             tampered = run(resume_args, cwd=fixture.repo, check=False)
             self.assertEqual(tampered.returncode, 1)
             self.assertIn("state fields", tampered.stderr)
-            self.assertFalse((worktree / "should-not-run").exists())
+            self.assertFalse((fixture.repo / "should-not-run").exists())
             del state["verify"]
             state_path.write_text(json.dumps(state), encoding="utf-8")
 
-            (worktree / "README.md").write_text("resolved version\n", encoding="utf-8")
-            git(worktree, "add", "README.md")
+            (fixture.repo / "README.md").write_text(
+                "resolved version\n", encoding="utf-8"
+            )
+            git(fixture.repo, "add", "README.md")
 
             resumed = run(resume_args, cwd=fixture.repo)
             self.assertIn('"dev": "dev"', resumed.stdout)
             self.assertIn('"mainline_conflict_diagnosis"', resumed.stdout)
+            self.assertEqual(integration_marker.read_text(), "i")
             remote_dev = run(
                 [
                     "git",
@@ -661,9 +712,17 @@ class PublishEnvironmentTests(unittest.TestCase):
                 git_output(fixture.repo, "rev-parse", "feature/test"),
                 feature_sha,
             )
+            self.assertEqual(
+                git_output(fixture.repo, "branch", "--show-current"),
+                "feature/test",
+            )
+            self.assertEqual(
+                git_output(fixture.repo, "rev-parse", "dev"),
+                remote_dev,
+            )
             self.assertFalse(state_path.parent.exists())
 
-    def test_test_publish_rebuilds_diverged_local_dev(self) -> None:
+    def test_test_publish_aligns_diverged_local_dev(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             fixture = RepoFixture(Path(temp))
 
@@ -688,7 +747,8 @@ class PublishEnvironmentTests(unittest.TestCase):
                 [sys.executable, str(SCRIPT), "test", "--repo", str(fixture.repo)],
                 cwd=fixture.repo,
             )
-            self.assertIn("ahead=1, behind=1", result.stdout)
+            self.assertIn("aligning local dev to origin/dev", result.stdout)
+            self.assertIn(f"old={abnormal_local_dev_sha}", result.stdout)
             self.assertIn('"dev": "dev"', result.stdout)
             remote_dev = run(
                 [
@@ -748,12 +808,41 @@ class PublishEnvironmentTests(unittest.TestCase):
             feature_sha = git_output(fixture.repo, "rev-parse", "feature/test")
 
             result = run(
-                [sys.executable, str(SCRIPT), "test", "--repo", str(fixture.repo)],
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "test",
+                    "--repo",
+                    str(fixture.repo),
+                    "--verify",
+                    f"printf x >> {shlex.quote(str(Path(temp) / 'verify-count'))}",
+                ],
                 cwd=fixture.repo,
             )
 
             self.assertIn("divergence is small", result.stdout)
             self.assertIn("mainline sync skipped", result.stdout)
+            self.assertEqual((Path(temp) / "verify-count").read_text(), "x")
+            self.assertIn('"integration_mode": "local-dev"', result.stdout)
+            self.assertEqual(
+                git_output(fixture.repo, "branch", "--show-current"),
+                "feature/test",
+            )
+            self.assertEqual(
+                git_output(fixture.repo, "rev-parse", "dev"),
+                run(
+                    [
+                        "git",
+                        "--git-dir",
+                        str(fixture.remote),
+                        "rev-parse",
+                        "refs/heads/dev",
+                    ],
+                    cwd=fixture.root,
+                ).stdout.strip(),
+            )
+            worktrees = git_output(fixture.repo, "worktree", "list", "--porcelain")
+            self.assertEqual(worktrees.count("worktree "), 1)
             self.assertEqual(
                 git_output(fixture.repo, "rev-parse", "feature/test"), feature_sha
             )
@@ -820,7 +909,7 @@ class PublishEnvironmentTests(unittest.TestCase):
 
         self.assertEqual(diagnosis["status"], "checked")
         self.assertTrue(diagnosis["is_large"])
-        self.assertIn("discard this isolated", diagnosis["recommendation"])
+        self.assertIn("do not start an integration checkout", diagnosis["recommendation"])
         self.assertIn("mainline into the demand branch", diagnosis["recommendation"])
 
     def test_test_publish_stops_before_commit_or_push_for_large_divergence(

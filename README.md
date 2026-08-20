@@ -19,8 +19,8 @@ Shared Codex skills for cross-machine installation and team reuse.
 - `git-publish-environment`
   - Publish GitHub or GitLab backend/web demand branches to test or production
   - Before test publication, compare only the demand branch with `main`/`master`; skip mainline sync for small divergence and require an explicit opt-in when the configurable large-divergence threshold is reached
-  - Test publication is strictly one-way (`demand branch -> dev`): rebuild stale/diverged local `dev` from `origin/dev`, then merge the immutable demand SHA in an isolated worktree without ever merging `dev` back into the demand branch
-  - If that test merge conflicts, refresh and report the exact demand-versus-mainline divergence before choosing isolated conflict resolution or a separately authorized mainline sync
+  - Test publication is strictly one-way (`demand branch -> dev`): align local `dev` to `origin/dev`, merge the immutable demand SHA in the current workspace, push the matching local/remote `dev`, then return to the demand branch without ever merging `dev` back into it
+  - Source verification runs once; a separate integration command is optional. If the test merge conflicts, refresh and report the exact demand-versus-mainline divergence, keep the current local `dev` checkout for resolution, and never create a temporary dependency-less worktree
   - Production syncs mainline into the demand branch only when needed, merges through PR/MR, bounds CI/review waiting, and tags the exact merged mainline SHA
   - Exact remote-fingerprint profiles keep confirmed repository exceptions and production gates outside project files; the PagePop profile conditionally syncs mainline, blocks concurrent `deploy-prod.yml` runs, reuses successful exact-SHA tags, and returns a CI/CD monitor handoff
   - The bundled script refuses whole-worktree staging, force push, admin bypass, direct mainline push, automatic conflict guesses, and unrelated later commits in a tag

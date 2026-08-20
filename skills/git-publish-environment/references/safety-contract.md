@@ -9,17 +9,16 @@
 - Enforce the immutable direction `demand branch -> dev`. Never merge, pull, rebase, or cherry-pick `dev` into the demand branch, including during conflict resolution or resume.
 - Fetch the exact remote environment branch before integration.
 - Do not call GitHub/GitLab merge APIs and do not clone another repository.
-- If local `dev` is missing, create it from `origin/dev`.
-- If local `dev` only trails the remote, rebuild it from `origin/dev` when it is not checked out in any worktree.
-- If `ahead > 0` and `behind > 0`, regardless of the counts, treat local `dev` as an abnormal disposable integration ref: record its old SHA and counts, delete it, and recreate it from the latest `origin/dev`. Do not merge the abnormal local ref, call a provider merge API, or re-clone the repository.
-- If local `dev` is ahead-only, stop because those commits may not exist remotely.
-- If another worktree has local `dev` checked out, stop rather than deleting or rewriting a branch in use.
-- Merge the immutable source SHA into a detached worktree created from the latest `origin/dev`.
+- Treat local `dev` as an environment mirror. If it is missing, create it from `origin/dev`; if it differs, align it exactly to the fetched remote tip before integration, including when it has local-only commits.
+- Stop if another worktree has local `dev` checked out. Otherwise switch the current workspace to local `dev` and merge the immutable source SHA there.
+- Use `git merge-tree` only to detect conflicts before changing the current checkout. When that preflight also shows a large demand/mainline difference, stop on the demand branch for a separate mainline decision.
 - Before pushing `dev`, require both the local demand branch and its remote ref to equal the immutable source SHA that was pushed at the start. Stop if either changed; never synchronize it from `dev`.
-- Preserve a conflicted integration worktree and a non-sensitive state file. Resume only with explicit repository, remote, branch, source SHA, and verification arguments that exactly match the generated state and registered worktree.
+- Preserve a conflicted local `dev` checkout and a non-sensitive state file. Resume only with explicit repository, remote, branch, source SHA, and integration-verification arguments that exactly match the generated state.
 - When test integration conflicts, refresh the latest remote mainline and record exact demand/mainline ahead, behind, overlapping files, thresholds, and recommendation in the state file. This diagnostic is read-only and never authorizes `dev -> demand` or an automatic mainline sync.
 - Fetch `origin/dev` again before push. Allow a normal push only when the latest remote `dev` is an ancestor of the integration result.
-- After a verified push, align the unused local `dev` ref to the pushed SHA only if it has not changed concurrently.
+- Run source `--verify` commands once on the demand branch. Run only separately supplied `--integration-verify` commands on the merged local `dev` checkout.
+- After a verified push, require local and remote `dev` to match, then switch the current workspace back to the demand branch.
+- Do not create a temporary worktree, install or download dependencies, or improvise dependency symlinks/copies during test publication. If existing dependencies cannot run an explicit integration check, stop or rely on the target CI.
 
 ## Production
 

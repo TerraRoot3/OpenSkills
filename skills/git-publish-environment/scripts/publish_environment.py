@@ -127,6 +127,17 @@ class MainlineDivergence:
         )
 
 
+@dataclass(frozen=True)
+class TestMergeTree:
+    tree_sha: str | None
+    conflict_paths: tuple[str, ...]
+    detail: str
+
+    @property
+    def clean(self) -> bool:
+        return self.tree_sha is not None and not self.conflict_paths
+
+
 def log(message: str) -> None:
     print(f"[publish] {message}", flush=True)
 
@@ -315,17 +326,61 @@ def worktree_state(repo: Path) -> tuple[bool, bool, list[str]]:
     return staged, unstaged, untracked
 
 
-def prepare_source(repo: Path, commit_message: str | None) -> str:
+def normalize_allowed_untracked_paths(values: Sequence[str]) -> tuple[str, ...]:
+    normalized: list[str] = []
+    for value in values:
+        candidate = value.strip().replace("\\", "/").rstrip("/")
+        path = Path(candidate)
+        if (
+            not candidate
+            or candidate == "."
+            or path.is_absolute()
+            or ".." in path.parts
+            or candidate == ".git"
+            or candidate.startswith(".git/")
+        ):
+            raise PublishError(f"invalid allowed untracked path: {value!r}")
+        if candidate not in normalized:
+            normalized.append(candidate)
+    return tuple(normalized)
+
+
+def untracked_path_allowed(path: str, allowed: Sequence[str]) -> bool:
+    return any(path == prefix or path.startswith(f"{prefix}/") for prefix in allowed)
+
+
+def prepare_source(
+    repo: Path,
+    commit_message: str | None,
+    allowed_untracked_paths: Sequence[str] = (),
+) -> str:
     ensure_no_operation(repo)
     source = current_branch(repo)
     ensure_source_branch(source)
     staged, unstaged, untracked = worktree_state(repo)
-    if unstaged or untracked:
+    blocked_untracked = [
+        path
+        for path in untracked
+        if not untracked_path_allowed(path, allowed_untracked_paths)
+    ]
+    preserved_untracked = [
+        path
+        for path in untracked
+        if untracked_path_allowed(path, allowed_untracked_paths)
+    ]
+    if preserved_untracked:
+        log(
+            "preserving explicitly allowed untracked paths: "
+            + ", ".join(preserved_untracked[:8])
+        )
+    if unstaged or blocked_untracked:
         details = []
         if unstaged:
             details.append("unstaged tracked changes")
-        if untracked:
-            details.append(f"untracked files: {', '.join(untracked[:8])}")
+        if blocked_untracked:
+            details.append(
+                f"untracked files: {', '.join(blocked_untracked[:8])}"
+            )
         raise PublishError(
             "worktree is not clean after the task allowlist was staged; "
             + "; ".join(details)
@@ -367,6 +422,7 @@ def fetch_branch(repo: Path, remote: str, branch: str) -> bool:
         remote,
         f"+refs/heads/{branch}:{remote_ref(remote, branch)}",
         "--prune",
+        "--no-tags",
         check=False,
         show=True,
     )
@@ -399,49 +455,38 @@ def branch_worktrees(repo: Path, branch: str) -> list[str]:
     return paths
 
 
-def rebuild_local_environment_branch(repo: Path, remote: str, branch: str) -> None:
-    local_ref = f"refs/heads/{branch}"
+def checkout_latest_environment_branch(
+    repo: Path,
+    remote: str,
+    branch: str,
+) -> str:
     tracked_ref = remote_ref(remote, branch)
     remote_sha = rev_parse(repo, tracked_ref)
     if not remote_sha:
         raise PublishError(f"remote environment branch is missing: {remote}/{branch}")
-    local_sha = rev_parse(repo, local_ref)
-    if not local_sha:
-        git(repo, "branch", "--track", branch, tracked_ref, show=True)
-        log(f"local {branch} created from {remote}/{branch} @ {remote_sha}")
-        return
-    if local_sha == remote_sha:
-        log(f"local {branch} already matches {remote}/{branch} @ {remote_sha}")
-        return
-    counts = git_output(
-        repo, "rev-list", "--left-right", "--count", f"{local_ref}...{tracked_ref}"
-    )
-    ahead_text, behind_text = counts.split()
-    ahead = int(ahead_text)
-    behind = int(behind_text)
-    if ahead > 0 and behind == 0:
-        raise PublishError(
-            f"local {branch} is ahead of {remote}/{branch} by {ahead} commit(s); "
-            "refusing to discard unpublished environment commits automatically"
-        )
     checked_out = branch_worktrees(repo, branch)
     if checked_out:
         raise PublishError(
-            f"local {branch} differs from {remote}/{branch} but is checked out in worktree(s): "
+            f"local {branch} is already checked out in worktree(s): "
             + ", ".join(checked_out)
-            + "; remove or switch those worktrees, then rerun"
         )
-    log(
-        f"rebuilding diverged local {branch}: old={local_sha}, "
-        f"ahead={ahead}, behind={behind}, remote={remote_sha}"
-    )
-    git(repo, "branch", "-D", branch, show=True)
-    git(repo, "branch", "--track", branch, tracked_ref, show=True)
-    rebuilt_sha = rev_parse(repo, local_ref)
-    if rebuilt_sha != remote_sha:
+    local_ref = f"refs/heads/{branch}"
+    local_sha = rev_parse(repo, local_ref)
+    if local_sha:
+        if local_sha != remote_sha:
+            log(
+                f"aligning local {branch} to {remote}/{branch}: "
+                f"old={local_sha}, remote={remote_sha}"
+            )
+            git(repo, "branch", "-f", branch, tracked_ref, show=True)
+    else:
+        git(repo, "branch", "--track", branch, tracked_ref, show=True)
+    git(repo, "switch", branch, show=True)
+    if current_branch(repo) != branch or git_output(repo, "rev-parse", "HEAD") != remote_sha:
         raise PublishError(
-            f"local {branch} rebuild verification failed: local={rebuilt_sha}, remote={remote_sha}"
+            f"local {branch} did not align to {remote}/{branch} @ {remote_sha}"
         )
+    return remote_sha
 
 
 def ls_remote_sha(repo: Path, remote: str, ref: str) -> str | None:
@@ -476,6 +521,54 @@ def push_source(repo: Path, remote: str, source: str) -> str:
         )
     log(f"source pushed: {source} @ {local_sha}")
     return local_sha
+
+
+def compute_test_merge_tree(
+    repo: Path,
+    base_dev_sha: str,
+    source_sha: str,
+) -> TestMergeTree:
+    result = git(
+        repo,
+        "merge-tree",
+        "--write-tree",
+        "--name-only",
+        "--messages",
+        base_dev_sha,
+        source_sha,
+        check=False,
+        show=True,
+    )
+    lines = result.stdout.splitlines()
+    tree_sha = lines[0].strip() if lines else ""
+    if not SHA_RE.fullmatch(tree_sha):
+        detail = (result.stderr or result.stdout).strip()
+        raise PublishError(
+            "git merge-tree did not return a valid tree"
+            + (f": {detail}" if detail else "")
+        )
+    if result.returncode == 0:
+        return TestMergeTree(tree_sha, (), "")
+    if result.returncode != 1:
+        detail = (result.stderr or result.stdout).strip()
+        raise PublishError(
+            f"git merge-tree failed ({result.returncode})"
+            + (f": {detail}" if detail else "")
+        )
+
+    conflict_paths: list[str] = []
+    for line in lines[1:]:
+        candidate = line.strip()
+        if not candidate:
+            break
+        conflict_paths.append(candidate)
+    detail = "\n".join(lines[len(conflict_paths) + 2 :]).strip()
+    if not conflict_paths:
+        raise PublishError(
+            "git merge-tree reported a conflict without conflict paths"
+            + (f": {detail}" if detail else "")
+        )
+    return TestMergeTree(None, tuple(conflict_paths), detail)
 
 
 def parse_remote(raw: str, provider_override: str) -> RemoteInfo:
@@ -579,7 +672,28 @@ def assess_mainline_divergence(
     return divergence
 
 
-def divergence_payload(divergence: MainlineDivergence) -> dict[str, Any]:
+def divergence_payload(
+    divergence: MainlineDivergence,
+    *,
+    conflict_checkout_started: bool = False,
+) -> dict[str, Any]:
+    if divergence.is_large:
+        recommendation = (
+            "abort the local dev integration and return to the demand "
+            "branch; after explicit authorization, "
+            "merge only mainline into the demand branch and rerun test publication"
+            if conflict_checkout_started
+            else "do not start an integration checkout; after explicit authorization, "
+            "merge only mainline into the demand branch and rerun test publication"
+        )
+    else:
+        recommendation = (
+            "keep the demand branch unchanged and resolve only the dev integration "
+            "conflict on the current local dev checkout"
+            if conflict_checkout_started
+            else "keep the demand branch unchanged and resolve only the dev integration "
+            "conflict in the current checkout"
+        )
     return {
         "status": "checked",
         "main": divergence.main,
@@ -589,12 +703,7 @@ def divergence_payload(divergence: MainlineDivergence) -> dict[str, Any]:
         "behind_threshold": divergence.behind_threshold,
         "overlap_threshold": divergence.overlap_threshold,
         "is_large": divergence.is_large,
-        "recommendation": (
-            "discard this isolated dev-conflict worktree; after explicit authorization, "
-            "merge only mainline into the demand branch and rerun test publication"
-            if divergence.is_large
-            else "keep the demand branch unchanged and resolve only the dev integration conflict in the isolated worktree"
-        ),
+        "recommendation": recommendation,
     }
 
 
@@ -605,6 +714,8 @@ def diagnose_test_conflict_against_mainline(
     source_sha: str,
     behind_threshold: int,
     overlap_threshold: int,
+    *,
+    conflict_checkout_started: bool = False,
 ) -> dict[str, Any]:
     try:
         if not fetch_branch(repo, remote, main):
@@ -617,13 +728,22 @@ def diagnose_test_conflict_against_mainline(
             overlap_threshold,
             source_ref=source_sha,
         )
-        return divergence_payload(divergence)
+        return divergence_payload(
+            divergence,
+            conflict_checkout_started=conflict_checkout_started,
+        )
     except PublishError as exc:
         return {
             "status": "unavailable",
             "main": main,
             "error": str(exc),
-            "recommendation": "preserve the isolated dev-conflict worktree and inspect mainline separately; never merge dev into the demand branch",
+            "recommendation": (
+                "preserve the local dev integration checkout and inspect mainline "
+                "separately; never merge dev into the demand branch"
+                if conflict_checkout_started
+                else "do not start the integration checkout until mainline can be "
+                "inspected; never merge dev into the demand branch"
+            ),
         }
 
 
@@ -1588,8 +1708,7 @@ def create_and_push_tag(
     return tag, expected_main_sha
 
 
-def cleanup_test_worktree(repo: Path, parent: Path, worktree: Path) -> None:
-    git(repo, "worktree", "remove", str(worktree), check=False)
+def cleanup_test_state_dir(parent: Path) -> None:
     temp_root = Path(tempfile.gettempdir()).resolve()
     if (
         parent.name.startswith("git-publish-test-")
@@ -1598,30 +1717,38 @@ def cleanup_test_worktree(repo: Path, parent: Path, worktree: Path) -> None:
         shutil.rmtree(parent, ignore_errors=True)
 
 
+def restore_source_checkout(repo: Path, source: str) -> None:
+    if git_path(repo, "MERGE_HEAD").exists():
+        git(repo, "merge", "--abort", check=False, show=True)
+    git(repo, "switch", source, show=True)
+    if current_branch(repo) != source:
+        raise PublishError(f"failed to restore demand branch checkout: {source}")
+
+
 def write_test_state(
     parent: Path,
     repo: Path,
-    worktree: Path,
     remote: str,
     dev: str,
     source: str,
     source_sha: str,
     base_dev_sha: str,
     mainline_conflict_diagnosis: dict[str, Any],
+    allowed_untracked_paths: Sequence[str],
 ) -> Path:
     state_path = parent / "state.json"
     state_path.write_text(
         json.dumps(
             {
-                "version": 3,
+                "version": 4,
                 "repo": str(repo),
-                "worktree": str(worktree),
                 "remote": remote,
                 "dev": dev,
                 "source": source,
                 "source_sha": source_sha,
                 "base_dev_sha": base_dev_sha,
                 "mainline_conflict_diagnosis": mainline_conflict_diagnosis,
+                "allowed_untracked_paths": list(allowed_untracked_paths),
             },
             indent=2,
             ensure_ascii=False,
@@ -1633,7 +1760,7 @@ def write_test_state(
     return state_path
 
 
-def resolve_resume_paths(state_path_value: str) -> tuple[Path, Path, Path]:
+def resolve_resume_paths(state_path_value: str) -> tuple[Path, Path]:
     state_path = Path(state_path_value).expanduser().resolve()
     parent = state_path.parent
     temp_root = Path(tempfile.gettempdir()).resolve()
@@ -1645,13 +1772,7 @@ def resolve_resume_paths(state_path_value: str) -> tuple[Path, Path, Path]:
         raise PublishError(
             "refusing a state file outside a generated test publish directory"
         )
-    return state_path, parent, parent / "integration"
-
-
-def git_common_dir(repo: Path) -> Path:
-    raw = git_output(repo, "rev-parse", "--git-common-dir")
-    path = Path(raw)
-    return path.resolve() if path.is_absolute() else (repo / path).resolve()
+    return state_path, parent
 
 
 def validate_resume_state(
@@ -1659,24 +1780,23 @@ def validate_resume_state(
     *,
     state_path: Path,
     repo: Path,
-    worktree: Path,
     remote: str,
     dev: str,
     source: str,
     source_sha: str,
-) -> str:
-    if state.get("version") != 3:
+) -> tuple[str, tuple[str, ...]]:
+    if state.get("version") != 4:
         raise PublishError("unsupported test state version")
     required = {
         "version",
         "repo",
-        "worktree",
         "remote",
         "dev",
         "source",
         "source_sha",
         "base_dev_sha",
         "mainline_conflict_diagnosis",
+        "allowed_untracked_paths",
     }
     if set(state) != required:
         raise PublishError(
@@ -1689,10 +1809,12 @@ def validate_resume_state(
         "source_sha": source_sha,
     }
     mismatches = [key for key, value in expected.items() if state.get(key) != value]
-    for key, value in (("repo", repo), ("worktree", worktree)):
-        saved = state.get(key)
-        if not isinstance(saved, str) or Path(saved).expanduser().resolve() != value:
-            mismatches.append(key)
+    saved_repo = state.get("repo")
+    if (
+        not isinstance(saved_repo, str)
+        or Path(saved_repo).expanduser().resolve() != repo
+    ):
+        mismatches.append("repo")
     if mismatches:
         raise PublishError(
             "resume arguments do not match saved state: " + ", ".join(mismatches)
@@ -1706,30 +1828,31 @@ def validate_resume_state(
         raise PublishError("saved mainline conflict diagnosis is invalid")
     if not SHA_RE.fullmatch(source_sha) or not SHA_RE.fullmatch(base_dev_sha):
         raise PublishError("saved source or dev SHA is invalid")
-    if not state_path.is_file() or not repo.is_dir() or not worktree.is_dir():
-        raise PublishError("saved repository or integration worktree no longer exists")
-    if git_common_dir(repo) != git_common_dir(worktree):
+    allowed_raw = state.get("allowed_untracked_paths")
+    if not isinstance(allowed_raw, list) or not all(
+        isinstance(value, str) for value in allowed_raw
+    ):
+        raise PublishError("saved allowed untracked paths are invalid")
+    allowed_untracked_paths = normalize_allowed_untracked_paths(allowed_raw)
+    if list(allowed_untracked_paths) != allowed_raw:
+        raise PublishError("saved allowed untracked paths are not normalized")
+    if not state_path.is_file() or not repo.is_dir():
+        raise PublishError("saved repository or test state no longer exists")
+    if git_output(repo, "branch", "--show-current") != dev:
         raise PublishError(
-            "saved integration worktree does not belong to the requested repository"
+            f"test integration must remain on the saved local {dev} checkout"
         )
-    worktree_list = git_output(repo, "worktree", "list", "--porcelain")
-    if f"worktree {worktree}" not in worktree_list.splitlines():
-        raise PublishError(
-            "saved integration worktree is not registered in the repository"
-        )
-    merge_head = rev_parse(worktree, "MERGE_HEAD")
+    merge_head = rev_parse(repo, "MERGE_HEAD")
     if merge_head:
         if (
             merge_head != source_sha
-            or git_output(worktree, "rev-parse", "HEAD") != base_dev_sha
+            or git_output(repo, "rev-parse", "HEAD") != base_dev_sha
         ):
             raise PublishError(
                 "saved conflict merge no longer matches the expected source and dev SHAs"
             )
     else:
-        parents = git_output(
-            worktree, "rev-list", "--parents", "-n", "1", "HEAD"
-        ).split()
+        parents = git_output(repo, "rev-list", "--parents", "-n", "1", "HEAD").split()
         if (
             len(parents) < 3
             or base_dev_sha not in parents[1:]
@@ -1738,7 +1861,7 @@ def validate_resume_state(
             raise PublishError(
                 "resolved integration HEAD is not the expected merge commit"
             )
-    return base_dev_sha
+    return base_dev_sha, allowed_untracked_paths
 
 
 def require_unchanged_test_source(
@@ -1759,47 +1882,35 @@ def require_unchanged_test_source(
 
 def finish_test_publish(
     repo: Path,
-    worktree: Path,
     remote: str,
     dev: str,
     source: str,
     source_sha: str,
-    verify: Sequence[str],
+    integration_verify: Sequence[str],
 ) -> str:
-    if not is_ancestor(worktree, source_sha, "HEAD"):
+    if not is_ancestor(repo, source_sha, "HEAD"):
         raise PublishError("test integration HEAD does not contain the source commit")
-    run_verifications(worktree, verify)
+    run_verifications(repo, integration_verify)
     if not fetch_branch(repo, remote, dev):
         raise PublishError(f"remote test branch does not exist: {remote}/{dev}")
     latest_dev = remote_ref(remote, dev)
-    if not is_ancestor(worktree, latest_dev, "HEAD"):
+    if not is_ancestor(repo, latest_dev, "HEAD"):
         raise PublishError(
-            f"{remote}/{dev} advanced and diverged during integration; discard this worktree and rerun test publish"
+            f"{remote}/{dev} advanced and diverged during integration; return to "
+            "the demand branch and rerun test publication"
         )
     require_unchanged_test_source(repo, remote, source, source_sha)
-    pre_push_dev_sha = git_output(repo, "rev-parse", latest_dev)
-    integration_sha = git_output(worktree, "rev-parse", "HEAD")
-    git(worktree, "push", remote, f"HEAD:refs/heads/{dev}", show=True)
+    integration_sha = git_output(repo, "rev-parse", "HEAD")
+    git(repo, "push", remote, f"HEAD:refs/heads/{dev}", show=True)
     verified = ls_remote_sha(repo, remote, f"refs/heads/{dev}")
     if verified != integration_sha:
         raise PublishError(
             f"test branch push verification failed: local={integration_sha}, remote={verified}"
         )
-    local_dev_sha = rev_parse(repo, f"refs/heads/{dev}")
-    if local_dev_sha == pre_push_dev_sha and not branch_worktrees(repo, dev):
-        git(
-            repo,
-            "update-ref",
-            f"refs/heads/{dev}",
-            integration_sha,
-            pre_push_dev_sha,
-            show=True,
-        )
-    elif local_dev_sha != integration_sha:
-        log(
-            f"remote {dev} was published, but local {dev} changed concurrently and was not rewritten"
-        )
-    log(f"test branch pushed: {dev} @ {integration_sha}")
+    log(
+        f"test branch pushed from the current local checkout: {dev} @ "
+        f"{integration_sha}; local and remote {dev} now match"
+    )
     return integration_sha
 
 
@@ -1843,7 +1954,14 @@ def publish_test(args: argparse.Namespace) -> None:
             f"{args.remote}/{main} into {source} before publishing to {args.dev_branch}.",
             EXIT_SYNC_RECOMMENDED,
         )
-    source = prepare_source(repo, args.commit_message)
+    allowed_untracked_paths = normalize_allowed_untracked_paths(
+        args.allow_untracked_path
+    )
+    source = prepare_source(
+        repo,
+        args.commit_message,
+        allowed_untracked_paths,
+    )
     validate_identity(repo)
     if divergence.is_large:
         merge_mainline_into_source(repo, args.remote, main, source, args.verify)
@@ -1857,101 +1975,181 @@ def publish_test(args: argparse.Namespace) -> None:
         raise PublishError(
             f"remote test branch does not exist: {args.remote}/{args.dev_branch}"
         )
-    rebuild_local_environment_branch(repo, args.remote, args.dev_branch)
+    base_dev_sha = rev_parse(repo, remote_ref(args.remote, args.dev_branch))
+    if not base_dev_sha:
+        raise PublishError(
+            f"remote test branch is missing after fetch: {args.remote}/{args.dev_branch}"
+        )
+
+    source_already_contained = is_ancestor(repo, source_sha, base_dev_sha)
+    merge_tree = (
+        None
+        if source_already_contained
+        else compute_test_merge_tree(repo, base_dev_sha, source_sha)
+    )
+    mainline_diagnosis: dict[str, Any] | None = None
+    if merge_tree and not merge_tree.clean:
+        mainline_diagnosis = diagnose_test_conflict_against_mainline(
+            repo,
+            args.remote,
+            main,
+            source_sha,
+            behind_threshold,
+            overlap_threshold,
+            conflict_checkout_started=False,
+        )
+        print(
+            "CONFLICT_PATHS="
+            + json.dumps(list(merge_tree.conflict_paths), ensure_ascii=False)
+        )
+        print(
+            "CONFLICT_MAINLINE_DIVERGENCE="
+            + json.dumps(mainline_diagnosis, ensure_ascii=False)
+        )
+        if (
+            mainline_diagnosis.get("status") != "checked"
+            or mainline_diagnosis.get("is_large")
+        ):
+            log(
+                "test merge has conflicts; the current checkout was left on the "
+                "demand branch because mainline must be handled first"
+            )
+            raise PublishError(
+                "test merge requires a separate mainline decision before dev integration",
+                EXIT_CONFLICT,
+            )
+
+    checked_out_dev_sha = checkout_latest_environment_branch(
+        repo,
+        args.remote,
+        args.dev_branch,
+    )
+    if checked_out_dev_sha != base_dev_sha:
+        restore_source_checkout(repo, source)
+        raise PublishError(
+            f"fetched {args.remote}/{args.dev_branch} changed before checkout; rerun "
+            "test publication"
+        )
 
     parent = Path(tempfile.mkdtemp(prefix="git-publish-test-"))
-    worktree = parent / "integration"
     try:
-        git(
-            repo,
-            "worktree",
-            "add",
-            "--detach",
-            str(worktree),
-            remote_ref(args.remote, args.dev_branch),
-            show=True,
-        )
-        base_dev_sha = git_output(worktree, "rev-parse", "HEAD")
-        merge = git(
-            worktree,
-            "merge",
-            "--no-ff",
-            "--no-edit",
-            source_sha,
-            check=False,
-            show=True,
-        )
-        if merge.returncode != 0:
-            unresolved = git_output(worktree, "diff", "--name-only", "--diff-filter=U")
-            if unresolved:
-                mainline_diagnosis = diagnose_test_conflict_against_mainline(
-                    repo,
-                    args.remote,
-                    main,
-                    source_sha,
-                    behind_threshold,
-                    overlap_threshold,
-                )
-                state = write_test_state(
-                    parent,
-                    repo,
-                    worktree,
-                    args.remote,
-                    args.dev_branch,
-                    source,
-                    source_sha,
-                    base_dev_sha,
-                    mainline_diagnosis,
-                )
-                log("test merge has conflicts; the isolated worktree was preserved")
-                print(
-                    "CONFLICT_MAINLINE_DIVERGENCE="
-                    + json.dumps(mainline_diagnosis, ensure_ascii=False)
-                )
-                print(f"STATE_FILE={state}")
-                print(f"WORKTREE={worktree}")
-                print("Resolve conflicts, git add the resolved files, then run:")
-                resume_args = [
-                    sys.executable,
-                    str(Path(__file__).resolve()),
-                    "resume-test",
-                    "--state",
-                    str(state),
-                    "--repo",
-                    str(repo),
-                    "--remote",
-                    args.remote,
-                    "--dev-branch",
-                    args.dev_branch,
-                    "--source-branch",
-                    source,
-                    "--source-sha",
-                    source_sha,
-                    "--command-timeout-seconds",
-                    str(args.command_timeout_seconds),
-                ]
-                for verify_command in args.verify:
-                    resume_args.extend(["--verify", verify_command])
-                print(f"  {command_text(resume_args)}")
+        if source_already_contained:
+            require_unchanged_test_source(
+                repo,
+                args.remote,
+                source,
+                source_sha,
+            )
+            run_verifications(repo, args.integration_verify)
+            live_dev_sha = ls_remote_sha(
+                repo,
+                args.remote,
+                f"refs/heads/{args.dev_branch}",
+            )
+            if live_dev_sha != base_dev_sha:
                 raise PublishError(
-                    "test merge requires conflict resolution", EXIT_CONFLICT
+                    f"{args.remote}/{args.dev_branch} advanced during verification; "
+                    "rerun test publication"
                 )
-            detail = (merge.stderr or merge.stdout).strip()
-            raise PublishError(f"test merge failed: {detail}")
-        integration_sha = finish_test_publish(
-            repo,
-            worktree,
-            args.remote,
-            args.dev_branch,
-            source,
-            source_sha,
-            args.verify,
-        )
+            integration_sha = base_dev_sha
+            integration_mode = "already-contained"
+            log(
+                f"{args.remote}/{args.dev_branch} already contains {source_sha}; "
+                f"local {args.dev_branch} now matches the remote"
+            )
+        else:
+            merge = git(
+                repo,
+                "merge",
+                "--no-ff",
+                "--no-edit",
+                source_sha,
+                check=False,
+                show=True,
+            )
+            if merge.returncode != 0:
+                unresolved = git_output(
+                    repo,
+                    "diff",
+                    "--name-only",
+                    "--diff-filter=U",
+                )
+                if unresolved:
+                    mainline_diagnosis = diagnose_test_conflict_against_mainline(
+                        repo,
+                        args.remote,
+                        main,
+                        source_sha,
+                        behind_threshold,
+                        overlap_threshold,
+                        conflict_checkout_started=True,
+                    )
+                    state = write_test_state(
+                        parent,
+                        repo,
+                        args.remote,
+                        args.dev_branch,
+                        source,
+                        source_sha,
+                        base_dev_sha,
+                        mainline_diagnosis,
+                        allowed_untracked_paths,
+                    )
+                    log(
+                        f"test merge has conflicts; the current workspace was "
+                        f"preserved on local {args.dev_branch}"
+                    )
+                    print(
+                        "CONFLICT_MAINLINE_DIVERGENCE="
+                        + json.dumps(mainline_diagnosis, ensure_ascii=False)
+                    )
+                    print(f"STATE_FILE={state}")
+                    print(f"INTEGRATION_CHECKOUT={repo}")
+                    print("Resolve conflicts, git add the resolved files, then run:")
+                    resume_args = [
+                        sys.executable,
+                        str(Path(__file__).resolve()),
+                        "resume-test",
+                        "--state",
+                        str(state),
+                        "--repo",
+                        str(repo),
+                        "--remote",
+                        args.remote,
+                        "--dev-branch",
+                        args.dev_branch,
+                        "--source-branch",
+                        source,
+                        "--source-sha",
+                        source_sha,
+                        "--command-timeout-seconds",
+                        str(args.command_timeout_seconds),
+                    ]
+                    for verify_command in args.integration_verify:
+                        resume_args.extend(["--integration-verify", verify_command])
+                    print(f"  {command_text(resume_args)}")
+                    raise PublishError(
+                        "test merge requires conflict resolution",
+                        EXIT_CONFLICT,
+                    )
+                detail = (merge.stderr or merge.stdout).strip()
+                raise PublishError(f"test merge failed: {detail}")
+            integration_sha = finish_test_publish(
+                repo,
+                args.remote,
+                args.dev_branch,
+                source,
+                source_sha,
+                args.integration_verify,
+            )
+            integration_mode = "local-dev"
     except PublishError as exc:
         if exc.exit_code != EXIT_CONFLICT:
-            cleanup_test_worktree(repo, parent, worktree)
+            restore_source_checkout(repo, source)
+            cleanup_test_state_dir(parent)
         raise
-    cleanup_test_worktree(repo, parent, worktree)
+    restore_source_checkout(repo, source)
+    cleanup_test_state_dir(parent)
     print(
         json.dumps(
             {
@@ -1959,6 +2157,7 @@ def publish_test(args: argparse.Namespace) -> None:
                 "source_sha": source_sha,
                 "dev": args.dev_branch,
                 "dev_sha": integration_sha,
+                "integration_mode": integration_mode,
             }
         )
     )
@@ -1968,48 +2167,52 @@ def resume_test(args: argparse.Namespace) -> None:
     validate_remote_name(args.remote)
     ensure_source_branch(args.source_branch)
     ensure_test_branch(args.dev_branch, args.source_branch)
-    state_path, parent, worktree = resolve_resume_paths(args.state)
+    state_path, parent = resolve_resume_paths(args.state)
     if not state_path.is_file():
         raise PublishError("saved test state file no longer exists")
     state = load_json(state_path.read_text(encoding="utf-8"), "test state")
     if not isinstance(state, dict):
         raise PublishError("test state must be a JSON object")
     repo = resolve_repo(args.repo)
-    validate_resume_state(
+    _base_dev_sha, allowed_untracked_paths = validate_resume_state(
         state,
         state_path=state_path,
         repo=repo,
-        worktree=worktree,
         remote=args.remote,
         dev=args.dev_branch,
         source=args.source_branch,
         source_sha=args.source_sha,
     )
-    unresolved = git_output(worktree, "diff", "--name-only", "--diff-filter=U")
+    unresolved = git_output(repo, "diff", "--name-only", "--diff-filter=U")
     if unresolved:
         raise PublishError(f"unresolved conflicts remain:\n{unresolved}")
-    if git(worktree, "diff", "--quiet", check=False).returncode != 0:
+    if git(repo, "diff", "--quiet", check=False).returncode != 0:
         raise PublishError(
-            "unstaged conflict-resolution changes remain in the integration worktree"
+            "unstaged conflict-resolution changes remain on local dev"
         )
-    untracked = git_output(worktree, "ls-files", "--others", "--exclude-standard")
-    if untracked:
+    untracked = git_output(repo, "ls-files", "--others", "--exclude-standard")
+    blocked_untracked = [
+        path
+        for path in untracked.splitlines()
+        if path and not untracked_path_allowed(path, allowed_untracked_paths)
+    ]
+    if blocked_untracked:
         raise PublishError(
-            f"untracked files remain in the integration worktree:\n{untracked}"
+            "untracked files remain on local dev:\n" + "\n".join(blocked_untracked)
         )
-    if git_path(worktree, "MERGE_HEAD").exists():
-        validate_identity(worktree)
-        git(worktree, "commit", "--no-edit", show=True)
+    if git_path(repo, "MERGE_HEAD").exists():
+        validate_identity(repo)
+        git(repo, "commit", "--no-edit", show=True)
     integration_sha = finish_test_publish(
         repo,
-        worktree,
         args.remote,
         args.dev_branch,
         args.source_branch,
         args.source_sha,
-        args.verify,
+        args.integration_verify,
     )
-    cleanup_test_worktree(repo, parent, worktree)
+    restore_source_checkout(repo, args.source_branch)
+    cleanup_test_state_dir(parent)
     print(
         json.dumps(
             {
@@ -2056,7 +2259,11 @@ def publish_production(args: argparse.Namespace) -> None:
         ensure_no_blocking_profile_runs(repo, command, info, profile)
     main = resolve_main_branch(repo, args.remote, args.main_branch)
     ensure_mainline_branch(main)
-    source = prepare_source(repo, args.commit_message)
+    source = prepare_source(
+        repo,
+        args.commit_message,
+        normalize_allowed_untracked_paths(args.allow_untracked_path),
+    )
     validate_identity(repo)
     run_verifications(repo, args.verify)
     source_sha = push_source(repo, args.remote, source)
@@ -2217,10 +2424,14 @@ def show_plan(args: argparse.Namespace) -> None:
                 f"overlap>={overlap_threshold} files"
             ),
             "commit staged task changes",
+            "run source verification once",
             "push source branch",
-            f"merge source into {args.dev_branch} in an isolated worktree",
-            "if the dev merge conflicts, refresh mainline and report exact demand/mainline divergence without changing the demand branch",
+            f"align local {args.dev_branch} to the fetched remote branch and switch to it",
+            f"merge source into local {args.dev_branch} in the current workspace",
+            "if the dev merge conflicts, keep the current local dev checkout for resolution and report exact demand/mainline divergence",
+            "run only explicit integration verification on the merged dev checkout",
             f"push {args.dev_branch}",
+            "switch back to the demand branch",
         ],
         "production_flow": [
             "commit staged task changes",
@@ -2256,6 +2467,15 @@ def parser() -> argparse.ArgumentParser:
         target.add_argument("--commit-message")
         target.add_argument("--verify", action="append", default=[])
         target.add_argument(
+            "--allow-untracked-path",
+            action="append",
+            default=[],
+            help=(
+                "preserve an exact repository-relative untracked path or subtree; "
+                "repeat for multiple paths"
+            ),
+        )
+        target.add_argument(
             "--command-timeout-seconds",
             type=int,
             default=DEFAULT_COMMAND_TIMEOUT_SECONDS,
@@ -2268,6 +2488,12 @@ def parser() -> argparse.ArgumentParser:
     test_parser.add_argument("--dev-branch", default="dev")
     test_parser.add_argument("--main-branch", default="auto")
     test_parser.add_argument("--sync-mainline", action="store_true")
+    test_parser.add_argument(
+        "--integration-verify",
+        action="append",
+        default=[],
+        help="verification to run only on the merged local test branch",
+    )
     test_parser.add_argument(
         "--main-behind-threshold",
         type=int,
@@ -2289,7 +2515,11 @@ def parser() -> argparse.ArgumentParser:
     resume_parser.add_argument("--dev-branch", required=True)
     resume_parser.add_argument("--source-branch", required=True)
     resume_parser.add_argument("--source-sha", required=True)
-    resume_parser.add_argument("--verify", action="append", default=[])
+    resume_parser.add_argument(
+        "--integration-verify",
+        action="append",
+        default=[],
+    )
     resume_parser.add_argument(
         "--command-timeout-seconds",
         type=int,

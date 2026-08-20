@@ -12,8 +12,8 @@ Run the deterministic script instead of manually repeating Git discovery and mer
 1. Read the repository rules that own protected branches, verification, PR/MR, and tags. Reuse their safety gates without copying unrelated manual ceremony.
 2. Resolve the real Git root, source branch, remote Host, Owner/Group, and active CLI identity.
 3. Require a demand branch. Never use `main`, `master`, `dev`, `release`, `pre`, or their environment derivatives as the source branch.
-4. Review the task diff and stage only the task file allowlist. The script commits staged changes only and stops when unstaged or untracked files remain.
-5. Choose the smallest relevant verification command. Pass each command with `--verify`; omit broad unrelated suites.
+4. Review the task diff and stage only the task file allowlist. The script commits staged changes only and stops when unstaged or untracked files remain. Preserve a known unrelated untracked subtree with a repeated exact `--allow-untracked-path <repo-relative-path>`; never broaden it to `.`.
+5. Choose the smallest relevant source verification command. Pass each command with `--verify`; the test workflow runs these commands once on the demand branch. Use `--integration-verify` only for a distinct check that must run on the merged local `dev` tree.
 6. Run the read-only plan before the first publish in a repository. It resolves any exact remote-fingerprint profile, its rule sources, external exceptions, thresholds, identity, and production gates without modifying the target repository:
 
 ```bash
@@ -37,9 +37,11 @@ Before any commit or push, fetch `main`/`master` and assess the divergence betwe
 
 When the threshold is reached, exit code `5` means no commit or push occurred and a mainline sync is recommended. Review the reported counts and overlap, then rerun with `--sync-mainline` only after that direction is authorized. This option performs only `main/master -> demand branch`; it never makes `dev` a source. If conflicts occur, resolve and commit that mainline merge on the demand branch, rerun focused verification, then repeat test publication.
 
-Enforce the test integration direction `demand branch -> dev`. Never check out the demand branch and merge, pull, rebase, or cherry-pick `dev` into it. The script pushes the source branch, fetches `origin/dev`, and compares the local and remote refs. When both ahead and behind counts are greater than zero, it treats local `dev` as an abnormal disposable integration ref: record its old SHA and counts, delete it, and recreate it from `origin/dev`. It then merges the immutable source SHA in an isolated temporary worktree and pushes `dev` normally. Before pushing `dev`, require both local and remote demand refs to remain at that immutable source SHA. Never try a PR/MR merge API or re-clone the repository to repair a diverged local `dev`.
+Enforce the test integration direction `demand branch -> dev`. Never merge, pull, rebase, or cherry-pick `dev` into the demand branch. The script verifies and pushes the immutable source SHA, fetches `origin/dev`, checks that local `dev` is not checked out in another worktree, aligns local `dev` exactly to `origin/dev`, switches the current workspace to local `dev`, merges the source SHA, pushes `dev`, verifies the remote SHA, and switches back to the demand branch. Local `dev` is an environment mirror in this workflow: local-only or diverged `dev` commits are replaced by the fetched remote tip before integration. Do not call a PR/MR merge API or re-clone the repository.
 
-If the merge conflicts, refresh the latest mainline and report `CONFLICT_MAINLINE_DIVERGENCE`, `STATE_FILE`, and `WORKTREE`. For a small demand/mainline difference, resolve only the integration conflicts inside that isolated `dev` worktree, stage the resolutions, and run the exact `resume-test` command. For a large difference, do not mix mainline synchronization into the preserved conflict: discard that isolated worktree, obtain explicit authorization for `main/master -> demand branch`, then rerun test publication. Never modify the demand branch from `dev`.
+The script uses `git merge-tree` only as a conflict preflight. If a conflict also requires a large mainline decision, it stops on the demand branch before changing local `dev`. Otherwise it performs the merge in the current workspace. On conflict it leaves the current checkout on local `dev` and reports `CONFLICT_MAINLINE_DIVERGENCE`, `STATE_FILE`, and `INTEGRATION_CHECKOUT`; resolve only those integration conflicts, stage the resolutions, and run the exact `resume-test` command. Resume commits and pushes local `dev`, then returns to the demand branch. Never modify the demand branch from `dev`.
+
+Do not create a temporary worktree for ordinary test publication, and do not install or download dependencies during publication. The current workspace reuses its existing dependencies. If an explicit `--integration-verify` cannot run with them, stop and use an already-provisioned environment or the target CI; do not improvise symlinks, copies, or package installation. Keep the default command timeout for ordinary publication unless the repository's known focused check genuinely requires a different bound.
 
 ## Publish production
 
@@ -80,8 +82,9 @@ If the injected path no longer exists because the plugin was installed, updated,
 - For test publication, assess only `demand branch <-> main/master`; never describe it as a test-environment difference.
 - Recommend `main/master -> demand branch` only at the configured large-divergence threshold, require explicit `--sync-mainline`, and skip it for small divergence.
 - For test integration, permit only `demand branch -> dev`; never merge, pull, rebase, or cherry-pick `dev` into the demand branch.
-- On a test merge conflict, refresh and report the exact demand/mainline divergence without automatically changing either branch.
-- Never discard an ahead-only local environment branch automatically. Rebuild only a missing, behind-only, or genuinely diverged local environment branch that is not checked out in any worktree.
+- On a test merge conflict, refresh and report the exact demand/mainline divergence without automatically changing the demand branch.
+- Treat local `dev` as a mirror of the fetched remote environment branch: stop if another worktree uses it; otherwise align it exactly to `origin/dev` before merging the demand branch.
+- Run `--verify` once on the demand branch. Run only separately supplied `--integration-verify` commands on the merged local `dev` tree.
 - Stop if the remote source branch is ahead or diverged.
 - Verify source, environment branch, mainline, and tag SHAs against the remote after writes.
 - Stop before tagging if mainline advanced after the PR/MR merge; do not include unrelated later commits silently.
