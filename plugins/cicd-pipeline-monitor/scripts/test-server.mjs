@@ -29,24 +29,81 @@ const fakeGhPath = join(tempRoot, "fake-gh.mjs");
 writeFileSync(fakeGhPath, `#!/usr/bin/env node
 const args = process.argv.slice(2);
 const output = (value) => process.stdout.write(typeof value === "string" ? value : JSON.stringify(value));
-if (args[0] === "auth") {
-  if (process.env.FAKE_AUTH_FAIL === "1") { process.stderr.write("not logged in"); process.exit(1); }
-  output("active account fixture");
-} else if (args[0] === "api") {
-  output(process.env.FAKE_GH_LOGIN || "fixture-user");
-} else if (args[0] === "repo" && args[1] === "view") {
-  const expected = ["repo", "view", "acme/widgets", "--json", "defaultBranchRef,url,nameWithOwner"];
-  if (JSON.stringify(args) !== JSON.stringify(expected)) {
-    process.stderr.write("unexpected gh repo view args: " + args.join(" "));
-    process.exit(6);
+const activeLogin = process.env.FAKE_GH_LOGIN || "fixture-user";
+const configuredLogins = [...new Set(
+  (process.env.FAKE_GH_ACCOUNTS || [activeLogin, "TerraRoot3", "hanbaokun"].join(","))
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean)
+)];
+const selectedLogin = process.env.GH_TOKEN?.startsWith("fixture-token-")
+  ? process.env.GH_TOKEN.slice("fixture-token-".length)
+  : activeLogin;
+const repositoryArg = () => {
+  const index = args.indexOf("--repo");
+  if (index >= 0) return args[index + 1] || "";
+  return args[0] === "repo" && args[1] === "view" ? args[2] || "" : "";
+};
+const requiredLogin = (repository) => {
+  if (process.env.FAKE_GH_REPO_LOGIN) return process.env.FAKE_GH_REPO_LOGIN;
+  const owner = String(repository).split("/")[0].toLowerCase();
+  if (owner === "terraroot3") return "TerraRoot3";
+  if (owner === "hanbaokun" || owner === "pagepop") return "hanbaokun";
+  return "";
+};
+const requireRepositoryAccess = (repository) => {
+  const expected = requiredLogin(repository);
+  if (expected && selectedLogin.toLowerCase() !== expected.toLowerCase()) {
+    process.stderr.write("repository access denied for " + selectedLogin);
+    process.exit(9);
   }
-  output({ defaultBranchRef: { name: "main" }, url: "https://github.com/acme/widgets", nameWithOwner: "acme/widgets" });
+};
+const requireEphemeralCredential = () => {
+  if (
+    process.env.FAKE_REQUIRE_EPHEMERAL_GH_TOKEN === "1"
+    && !process.env.GH_TOKEN?.startsWith("fixture-token-")
+  ) {
+    process.stderr.write("missing per-command GitHub credential");
+    process.exit(11);
+  }
+};
+if (args[0] === "auth" && args[1] === "status") {
+  if (process.env.FAKE_AUTH_FAIL === "1") { process.stderr.write("not logged in"); process.exit(1); }
+  if (args.includes("--json")) {
+    const host = args[args.indexOf("--hostname") + 1] || "github.com";
+    output({ hosts: { [host]: configuredLogins.map((login) => ({ login, active: login === activeLogin })) } });
+  } else {
+    output("active account fixture");
+  }
+} else if (args[0] === "auth" && args[1] === "token") {
+  const login = args[args.indexOf("--user") + 1] || activeLogin;
+  const configured = configuredLogins.some((item) => item.toLowerCase() === login.toLowerCase());
+  if (!configured || process.env.FAKE_AUTH_FAIL === "1" || process.env.FAKE_GH_TOKEN_FAIL === login) {
+    process.stderr.write("not logged in");
+    process.exit(1);
+  }
+  output("fixture-token-" + login);
+} else if (args[0] === "auth" && args[1] === "switch") {
+  process.stderr.write("global account switching is forbidden in this fixture");
+  process.exit(10);
+} else if (args[0] === "api") {
+  requireEphemeralCredential();
+  output(selectedLogin);
+} else if (args[0] === "repo" && args[1] === "view") {
+  requireEphemeralCredential();
+  const repository = repositoryArg();
+  requireRepositoryAccess(repository);
+  output({ defaultBranchRef: { name: "main" }, url: "https://github.com/" + repository, nameWithOwner: repository });
 } else if (args[0] === "workflow" && args[1] === "list") {
+  requireEphemeralCredential();
+  requireRepositoryAccess(repositoryArg());
   output([
     { id: 11, name: "Release to environment with a deliberately long name", path: ".github/workflows/release.yml", state: "active" },
     { id: 12, name: "Checks", path: ".github/workflows/checks.yml", state: "active" }
   ]);
 } else if (args[0] === "workflow" && args[1] === "run") {
+  requireEphemeralCredential();
+  requireRepositoryAccess(repositoryArg());
   let body = "";
   process.stdin.on("data", (chunk) => body += chunk);
   process.stdin.on("end", () => {
@@ -54,6 +111,8 @@ if (args[0] === "auth") {
     if (parsed.environment !== "test") process.exit(2);
   });
 } else if (args[0] === "run" && args[1] === "list") {
+  requireEphemeralCredential();
+  requireRepositoryAccess(repositoryArg());
   output([{
     databaseId: 100, workflowDatabaseId: 11, workflowName: "Release to environment with a deliberately long name",
     name: "Release", number: 44, status: "in_progress", conclusion: "", event: "workflow_dispatch",
@@ -61,6 +120,8 @@ if (args[0] === "auth") {
     url: "https://github.com/acme/widgets/actions/runs/100", headBranch: "main", headSha: "1234567890abcdef"
   }]);
 } else if (args[0] === "run" && args[1] === "view") {
+  requireEphemeralCredential();
+  requireRepositoryAccess(repositoryArg());
   const id = Number(args[2]);
   const map = {
     100: ["in_progress", ""],
@@ -143,6 +204,7 @@ class RpcClient {
         CICD_PIPELINE_MONITOR_GH_COMMAND: fakeGhPath,
         CICD_PIPELINE_MONITOR_GLAB_COMMAND: fakeGlabPath,
         CICD_PIPELINE_MONITOR_STATE_DIR: stateDir,
+        FAKE_REQUIRE_EPHEMERAL_GH_TOKEN: "1",
         ...env
       }
     });
@@ -201,7 +263,7 @@ try {
     "list_cicd_targets", "trigger_cicd_run", "open_cicd_monitor", "get_cicd_run_status"
   ]);
   const toolsByName = Object.fromEntries(tools.result.tools.map((tool) => [tool.name, tool]));
-  assert.match(toolsByName.trigger_cicd_run.description, /never call open_cicd_monitor/);
+  assert.match(toolsByName.trigger_cicd_run.description, /inspect provider state before any retry/);
   assert.match(toolsByName.open_cicd_monitor.description, /Call once per monitoring request/);
   assert.match(toolsByName.get_cicd_run_status.description, /without mounting a new card/);
 
@@ -358,7 +420,7 @@ try {
   assert.ok(resource.result.contents[0].text.includes("transition: transform 360ms"));
   assert.ok(!resource.result.contents[0].text.includes("jobs.slice(0, 4)"));
 
-  const missingConfirmation = await client.tool("trigger_cicd_run", {
+  const missingAuthorization = await client.tool("trigger_cicd_run", {
     repoPath: githubRepo,
     provider: "github",
     workflow: ".github/workflows/release.yml",
@@ -366,8 +428,8 @@ try {
     environment: "测网",
     inputs: { environment: "test" }
   });
-  assert.equal(missingConfirmation.isError, true);
-  assert.match(missingConfirmation.content[0].text, /confirmed=true/);
+  assert.equal(missingAuthorization.isError, true);
+  assert.match(missingAuthorization.content[0].text, /confirmed=true/);
 
   const shortSecretFailure = await client.tool("trigger_cicd_run", {
     repoPath: githubRepo,
@@ -382,13 +444,30 @@ try {
   assert.match(shortSecretFailure.content[0].text, /敏感输入与提供商原始输出已隐藏/);
 
   const mappedGithubRepo = createRepo("mapped-github-repo", "git@github.com:TerraRoot3/OpenSkills.git");
-  const wrongAccountClient = new RpcClient({ FAKE_GH_LOGIN: "hanbaokun" });
+  const mappedAccountClient = new RpcClient({
+    FAKE_GH_LOGIN: "hanbaokun",
+    FAKE_GH_ACCOUNTS: "hanbaokun,TerraRoot3"
+  });
   try {
-    const accountMismatch = await wrongAccountClient.tool("list_cicd_targets", { repoPath: mappedGithubRepo });
-    assert.equal(accountMismatch.isError, true);
-    assert.match(accountMismatch.content[0].text, /Owner 要求 TerraRoot3/);
+    const mappedTargets = await mappedAccountClient.tool("list_cicd_targets", { repoPath: mappedGithubRepo });
+    assert.equal(mappedTargets.isError, undefined);
+    assert.equal(mappedTargets.structuredContent.activeLogin, "TerraRoot3");
   } finally {
-    wrongAccountClient.close();
+    mappedAccountClient.close();
+  }
+
+  const fallbackGithubRepo = createRepo("fallback-github-repo", "git@github.com:unknown-org/widgets.git");
+  const fallbackAccountClient = new RpcClient({
+    FAKE_GH_LOGIN: "hanbaokun",
+    FAKE_GH_ACCOUNTS: "hanbaokun,TerraRoot3",
+    FAKE_GH_REPO_LOGIN: "TerraRoot3"
+  });
+  try {
+    const fallbackTargets = await fallbackAccountClient.tool("list_cicd_targets", { repoPath: fallbackGithubRepo });
+    assert.equal(fallbackTargets.isError, undefined);
+    assert.equal(fallbackTargets.structuredContent.activeLogin, "TerraRoot3");
+  } finally {
+    fallbackAccountClient.close();
   }
 
   const authClient = new RpcClient({ FAKE_AUTH_FAIL: "1" });

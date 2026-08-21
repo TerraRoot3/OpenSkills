@@ -4,14 +4,14 @@
 
 - Before any source commit or push, fetch the latest `main`/`master` and assess divergence between the demand branch and mainline. Do not compare `dev` for this decision.
 - Treat the divergence as large by default when the demand branch is at least 100 commits behind mainline or both sides changed at least 20 of the same files since their common base. Keep both thresholds configurable.
-- For small divergence, skip mainline synchronization. For large divergence, stop before commit/push and recommend synchronization; perform only `main/master -> demand branch` after explicit `--sync-mainline` authorization.
+- For small divergence, skip mainline synchronization. At the large-divergence threshold, automatically perform only `main/master -> demand branch`, verify it, and continue test publication.
 - Accept only `main` or `master` as mainline and reject them as test targets; never relabel `dev` as mainline to bypass the direction rule.
 - Enforce the immutable direction `demand branch -> dev`. Never merge, pull, rebase, or cherry-pick `dev` into the demand branch, including during conflict resolution or resume.
 - Fetch the exact remote environment branch before integration.
 - Do not call GitHub/GitLab merge APIs and do not clone another repository.
 - Treat local `dev` as an environment mirror. If it is missing, create it from `origin/dev`; if it differs, align it exactly to the fetched remote tip before integration, including when it has local-only commits.
 - Stop if another worktree has local `dev` checked out. Otherwise switch the current workspace to local `dev` and merge the immutable source SHA there.
-- Use `git merge-tree` only to detect conflicts before changing the current checkout. When that preflight also shows a large demand/mainline difference, stop on the demand branch for a separate mainline decision.
+- Use `git merge-tree` only to detect conflicts before changing the current checkout. When preflight also shows a new large demand/mainline difference, refresh and synchronize mainline on the demand branch before retrying integration.
 - Before pushing `dev`, require both the local demand branch and its remote ref to equal the immutable source SHA that was pushed at the start. Stop if either changed; never synchronize it from `dev`.
 - Preserve a conflicted local `dev` checkout and a non-sensitive state file. Resume only with explicit repository, remote, branch, source SHA, and integration-verification arguments that exactly match the generated state.
 - When test integration conflicts, refresh the latest remote mainline and record exact demand/mainline ahead, behind, overlapping files, thresholds, and recommendation in the state file. This diagnostic is read-only and never authorizes `dev -> demand` or an automatic mainline sync.
@@ -25,16 +25,16 @@
 - Commit only reviewed, staged task files and push the demand branch first.
 - Fetch the exact remote mainline. Merge it into the demand branch only when the demand branch does not already contain it and has not already been merged.
 - Resolve mainline conflicts on the demand branch, rerun focused verification, and push the updated demand branch.
-- Preview and confirm the exact PR/MR provider, repository, source, target, title, and body before creating it. Pass confirmed content explicitly; do not rely on automatic fill.
+- After production publication is explicitly authorized, show the exact PR/MR provider, repository, source, target, title, and body as a non-blocking execution update, then continue without a separate content-confirmation pause. Pass the final content explicitly; do not rely on automatic fill.
 - Create or reuse a PR/MR matching the exact source SHA and mainline target.
 - Require a non-draft request and exact source head. Never use admin/bypass flags.
 - Use normal platform auto-merge so required checks and reviews remain authoritative.
-- Bound waiting. A timeout is a waiting result, not a reason to recreate, force, re-clone, or retry an uncertain merge.
-- Require every PR/MR status read to expose the exact expected source head SHA; stop if it is missing or changes while auto-merge waits.
-- Fetch mainline after merge and require its SHA to equal the PR/MR merge SHA before tagging. If it advanced, stop and request a release-scope decision.
+- Bound each wait. A timeout leads to status monitoring and the exact resume path, not a duplicate request or uncertain merge attempt.
+- Require every PR/MR status read to expose the exact expected source head SHA. Reconcile an ordinary same-branch update and re-verify; preserve a genuine unknown scope as an external blocker.
+- Fetch mainline after merge. If it advanced, require the captured PR/MR merge SHA to remain in mainline history and tag only that captured SHA, excluding later commits.
 - Create an annotated `v<major>.<minor>.<patch>` tag on the captured merge SHA, never on a later fetched tip. Recheck live mainline immediately before the tag push. Automatic versioning increments the numeric patch component without decimal carry (`v0.0.337` becomes `v0.0.338`).
 - Verify the remote peeled tag SHA equals the mainline SHA.
-- For a matched repository production profile, stop before tag creation or reuse while its configured workflow has a blocking run. Reuse an exact-SHA tag only after a real successful workflow result; require a confirmed reason before replacing a failed, incomplete, or unverifiable exact-SHA tag.
+- For a matched repository production profile, wait while its configured workflow is active. Reuse an exact-SHA tag only after a real successful workflow result, monitor pending or unverifiable evidence without duplication, and create at most the configured number of automatic retry tags after provider-reported terminal failures.
 - Return an exact monitor handoff after profile tag creation or reuse. CI success, deployment completion, and runtime verification remain separate evidence layers.
 
 ## Identity and state
@@ -53,6 +53,6 @@
 - PR/MR use for ordinary `dev` publication.
 - Re-cloning to escape a stale local environment branch.
 - Automatic staging of the whole worktree.
-- Automatic conflict resolution.
+- Fixed-strategy or guessed conflict resolution; evidence-backed task resolution remains part of the workflow.
 - Unbounded polling.
 - Broad repository-wide tests when a focused authoritative gate is available.

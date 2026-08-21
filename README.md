@@ -18,11 +18,11 @@ Shared Codex skills for cross-machine installation and team reuse.
 
 - `git-publish-environment`
   - Publish GitHub or GitLab backend/web demand branches to test or production
-  - Before test publication, compare only the demand branch with `main`/`master`; skip mainline sync for small divergence and require an explicit opt-in when the configurable large-divergence threshold is reached
+  - Before test publication, compare only the demand branch with `main`/`master`; skip mainline sync for small divergence and automatically sync mainline into the demand branch at the configurable large-divergence threshold
   - Test publication is strictly one-way (`demand branch -> dev`): align local `dev` to `origin/dev`, merge the immutable demand SHA in the current workspace, push the matching local/remote `dev`, then return to the demand branch without ever merging `dev` back into it
   - Source verification runs once; a separate integration command is optional. If the test merge conflicts, refresh and report the exact demand-versus-mainline divergence and keep the current local `dev` checkout for resolution. Ordinary publication never creates a temporary worktree; an explicitly required worktree must reuse compatible local dependencies without online installation
-  - Production syncs mainline into the demand branch only when needed, merges through PR/MR, bounds CI/review waiting, and tags the exact merged mainline SHA
-  - Exact remote-fingerprint profiles keep confirmed repository exceptions and production gates outside project files; the PagePop profile conditionally syncs mainline, blocks concurrent `deploy-prod.yml` runs, reuses successful exact-SHA tags, and returns a CI/CD monitor handoff
+  - Production syncs mainline into the demand branch only when needed, merges through PR/MR, continuously handles bounded CI/review waiting, and tags the captured merge SHA without including later mainline commits
+  - Exact remote-fingerprint profiles keep repository exceptions outside project files; the PagePop profile waits for concurrent `deploy-prod.yml` runs, reuses successful exact-SHA tags, performs one evidence-backed automatic retry after a terminal failure, and returns a CI/CD monitor handoff
   - The bundled script refuses whole-worktree staging, force push, admin bypass, direct mainline push, automatic conflict guesses, and unrelated later commits in a tag
 
 - `gitlab-production-readiness-check`
@@ -60,12 +60,13 @@ Shared Codex skills for cross-machine installation and team reuse.
 
 - `cicd-pipeline-monitor`
   - Detects GitHub Actions or GitLab CI/CD from the current repository remote
-  - Reuses the active local `gh` or host-specific `glab` login without storing access tokens
-  - Triggers an explicitly confirmed test, staging, or production pipeline and returns a compact conversation card
+  - Selects the repository-mapped local GitHub account automatically; for unknown Owners, tries the active account and then other authenticated accounts until one can access the exact repository
+  - Passes the selected GitHub credential only to each plugin operation without storing it or changing the global active `gh` account; GitLab continues to reuse the exact-host `glab` login
+  - Treats a request to publish to a named test, staging, or production environment as one authorization for the exact discovered target, then returns a compact conversation card without a second prompt
   - Refreshes queued and running pipelines automatically, watches failed runs for a bounded retry window, and persists real success so reopened cards do not resume polling
   - Shows environment, ref, commit, duration, job progress, and provider failure summary without an internal scrollbar
   - Opens the exact GitHub or GitLab run in the system browser through a CSP-allowlisted action
-  - Requires an explicit mechanical confirmation flag for provider, repository, workflow, ref, environment, and inputs before any trigger, with Owner-to-account checks for configured GitHub identities
+  - Requires a mechanical authorization field bound to the exact provider, repository, workflow, ref, environment, and input names, with Owner-to-account checks for configured GitHub identities
 
 ## Install Example
 

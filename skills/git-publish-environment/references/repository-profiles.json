@@ -14,12 +14,12 @@
         {
           "kind": "confirmed_external_override",
           "location": "global OpenSkills repository profile",
-          "statement": "需求分支与主分支差异小时跳过同步，差异大时才建议 main -> 需求分支。"
+          "statement": "需求分支与主分支差异小时跳过同步，达到大分叉阈值时自动执行 main -> 需求分支。"
         }
       ],
       "rule_conflict": {
-        "summary": "项目 Guide 要求每次测网同步 origin/main；用户确认的仓库外置规则改为按大分叉阈值条件同步。",
-        "effective_rule": "采用用户确认的仓库外置例外：小分叉不合主分支，大分叉只建议并等待显式授权。",
+        "summary": "项目 Guide 要求每次测网同步 origin/main；用户确认的仓库外置规则改为按大分叉阈值条件自动同步。",
+        "effective_rule": "采用用户确认的仓库外置例外：小分叉不合主分支，达到大分叉阈值后自动同步。",
         "project_files_modified": false
       },
       "test": {
@@ -40,7 +40,7 @@
           "waiting"
         ],
         "reuse_successful_tag_for_same_sha": true,
-        "require_reason_after_unsuccessful_tag": true,
+        "max_automatic_tag_retries": 1,
         "monitor_required": true,
         "runtime_verification_required": true
       }

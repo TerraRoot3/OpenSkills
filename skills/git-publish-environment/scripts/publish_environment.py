@@ -22,7 +22,6 @@ from urllib.parse import urlparse
 
 EXIT_CONFLICT = 3
 EXIT_WAITING = 4
-EXIT_SYNC_RECOMMENDED = 5
 DEFAULT_COMMAND_TIMEOUT_SECONDS = 300
 MAX_COMMAND_TIMEOUT_SECONDS = 3600
 DEFAULT_MAIN_BEHIND_THRESHOLD = 100
@@ -81,7 +80,7 @@ class ProductionProfile:
     workflow: str
     blocking_statuses: tuple[str, ...]
     reuse_successful_tag_for_same_sha: bool
-    require_reason_after_unsuccessful_tag: bool
+    max_automatic_tag_retries: int
     monitor_required: bool
     runtime_verification_required: bool
 
@@ -1038,7 +1037,7 @@ def load_repository_profiles(path: Path | None = None) -> tuple[RepositoryProfil
                 "workflow",
                 "blocking_statuses",
                 "reuse_successful_tag_for_same_sha",
-                "require_reason_after_unsuccessful_tag",
+                "max_automatic_tag_retries",
                 "monitor_required",
                 "runtime_verification_required",
             },
@@ -1099,9 +1098,9 @@ def load_repository_profiles(path: Path | None = None) -> tuple[RepositoryProfil
                         raw_production["reuse_successful_tag_for_same_sha"],
                         f"{context}.production.reuse_successful_tag_for_same_sha",
                     ),
-                    require_reason_after_unsuccessful_tag=require_bool(
-                        raw_production["require_reason_after_unsuccessful_tag"],
-                        f"{context}.production.require_reason_after_unsuccessful_tag",
+                    max_automatic_tag_retries=require_positive_int(
+                        raw_production["max_automatic_tag_retries"],
+                        f"{context}.production.max_automatic_tag_retries",
                     ),
                     monitor_required=require_bool(
                         raw_production["monitor_required"],
@@ -1540,12 +1539,12 @@ def remote_semver_tags_by_sha(repo: Path, remote: str) -> dict[str, str]:
     }
 
 
-def ensure_no_blocking_profile_runs(
+def blocking_profile_runs(
     repo: Path,
     command: str,
     info: RemoteInfo,
     profile: RepositoryProfile,
-) -> None:
+) -> list[dict[str, Any]]:
     production = profile.production
     runs = github_workflow_runs(
         repo,
@@ -1554,19 +1553,39 @@ def ensure_no_blocking_profile_runs(
         production.workflow,
     )
     blocking_statuses = set(production.blocking_statuses)
-    blocking = [
+    return [
         run
         for run in runs
         if str(run.get("status") or "").casefold() in blocking_statuses
     ]
-    if blocking:
+
+
+def wait_for_no_blocking_profile_runs(
+    repo: Path,
+    command: str,
+    info: RemoteInfo,
+    profile: RepositoryProfile,
+    wait_seconds: int,
+    poll_seconds: int,
+) -> None:
+    deadline = time.monotonic() + max(0, wait_seconds)
+    while True:
+        blocking = blocking_profile_runs(repo, command, info, profile)
+        if not blocking:
+            return
         preview = ", ".join(
             str(run.get("url") or run.get("databaseId") or "unknown-run")
             for run in blocking[:5]
         )
-        raise PublishError(
-            f"production workflow {production.workflow} still has blocking run(s): {preview}; refusing to continue production publication"
+        if time.monotonic() >= deadline:
+            raise PublishError(
+                f"production workflow {profile.production.workflow} still has active run(s) after the bounded wait: {preview}",
+                EXIT_WAITING,
+            )
+        log(
+            f"waiting for active production workflow {profile.production.workflow}: {preview}"
         )
+        time.sleep(max(1, poll_seconds))
 
 
 def semver_sort_key(tag: str) -> tuple[int, int, int]:
@@ -1586,9 +1605,19 @@ def create_or_reuse_profile_tag(
     command: str,
     info: RemoteInfo,
     profile: RepositoryProfile,
+    *,
+    wait_seconds: int = 0,
+    poll_seconds: int = 10,
 ) -> TagDecision:
     production = profile.production
-    ensure_no_blocking_profile_runs(repo, command, info, profile)
+    wait_for_no_blocking_profile_runs(
+        repo,
+        command,
+        info,
+        profile,
+        wait_seconds,
+        poll_seconds,
+    )
 
     same_sha_tags = sorted(
         (
@@ -1599,7 +1628,8 @@ def create_or_reuse_profile_tag(
         key=semver_sort_key,
     )
     successful_tags: list[str] = []
-    unsuccessful_tags: list[str] = []
+    failed_tags: list[str] = []
+    pending_or_unverified_tags: list[str] = []
     for tag in same_sha_tags:
         tag_runs = github_workflow_runs(
             repo,
@@ -1608,13 +1638,43 @@ def create_or_reuse_profile_tag(
             production.workflow,
             branch=tag,
         )
-        succeeded = any(
-            str(run.get("headSha") or "") == expected_main_sha
-            and str(run.get("status") or "").casefold() == "completed"
-            and str(run.get("conclusion") or "").casefold() == "success"
+        matching_runs = [
+            run
             for run in tag_runs
+            if str(run.get("headSha") or "") == expected_main_sha
+        ]
+        succeeded = any(
+            str(run.get("status") or "").casefold() == "completed"
+            and str(run.get("conclusion") or "").casefold() == "success"
+            for run in matching_runs
         )
-        (successful_tags if succeeded else unsuccessful_tags).append(tag)
+        terminal_failure_conclusions = {
+            "failure",
+            "cancelled",
+            "timed_out",
+            "action_required",
+            "startup_failure",
+        }
+        failed = any(
+            str(run.get("status") or "").casefold() == "completed"
+            and str(run.get("conclusion") or "").casefold()
+            in terminal_failure_conclusions
+            for run in matching_runs
+        )
+        pending_or_unverified = not matching_runs or any(
+            str(run.get("status") or "").casefold() != "completed"
+            or str(run.get("conclusion") or "").casefold()
+            not in terminal_failure_conclusions | {"success"}
+            for run in matching_runs
+        )
+        if succeeded:
+            successful_tags.append(tag)
+        elif pending_or_unverified:
+            pending_or_unverified_tags.append(tag)
+        elif failed:
+            failed_tags.append(tag)
+        else:
+            pending_or_unverified_tags.append(tag)
 
     if successful_tags and production.reuse_successful_tag_for_same_sha:
         tag = successful_tags[-1]
@@ -1623,20 +1683,27 @@ def create_or_reuse_profile_tag(
         )
         return TagDecision(tag=tag, sha=expected_main_sha, reused=True)
 
-    if (
-        unsuccessful_tags
-        and production.require_reason_after_unsuccessful_tag
-        and not (new_tag_reason or "").strip()
-    ):
+    if pending_or_unverified_tags:
         raise PublishError(
-            "the exact mainline SHA already has non-successful or unverified production tag(s): "
-            + ", ".join(unsuccessful_tags)
-            + "; pass --new-tag-reason with the confirmed reason before creating a new tag"
+            "production evidence is still pending or unverifiable for exact-SHA tag(s): "
+            + ", ".join(pending_or_unverified_tags)
+            + "; monitor the existing run and rerun without creating a duplicate tag",
+            EXIT_WAITING,
         )
-    if unsuccessful_tags:
+    if failed_tags:
+        retries_already_created = max(0, len(failed_tags) - 1)
+        if retries_already_created >= production.max_automatic_tag_retries:
+            raise PublishError(
+                "automatic production-tag retry limit reached for exact mainline SHA: "
+                + ", ".join(failed_tags)
+            )
+        reason = (new_tag_reason or "").strip() or (
+            "automatic retry after provider-reported terminal failure for "
+            + ", ".join(failed_tags)
+        )
         log(
-            "creating a new production tag after non-successful tag(s); "
-            "a confirmed --new-tag-reason was supplied"
+            "creating one bounded automatic production-tag retry; "
+            f"reason={reason}"
         )
     tag, sha = create_and_push_tag(
         repo,
@@ -1648,8 +1715,8 @@ def create_or_reuse_profile_tag(
     return TagDecision(tag=tag, sha=sha, reused=False)
 
 
-def next_tag(repo: Path, main_ref: str) -> str:
-    output = git_output(repo, "tag", "--merged", main_ref, "--list", "v*.*.*")
+def next_tag(repo: Path, _main_ref: str) -> str:
+    output = git_output(repo, "tag", "--list", "v*.*.*")
     versions = []
     for tag in output.splitlines():
         match = SEMVER_RE.fullmatch(tag.strip())
@@ -1670,14 +1737,31 @@ def create_and_push_tag(
     expected_main_sha: str,
     requested: str,
 ) -> tuple[str, str]:
-    git(repo, "fetch", remote, main, "--tags", "--prune", show=True)
+    git(repo, "fetch", remote, "--tags", "--prune", show=True)
+    if not fetch_branch(repo, remote, main):
+        raise PublishError(f"remote mainline does not exist: {remote}/{main}")
     main_ref = remote_ref(remote, main)
     main_sha = git_output(repo, "rev-parse", main_ref)
     live_main_sha = ls_remote_sha(repo, remote, f"refs/heads/{main}")
-    if main_sha != expected_main_sha or live_main_sha != expected_main_sha:
+    if live_main_sha != main_sha:
+        if not fetch_branch(repo, remote, main):
+            raise PublishError(f"remote mainline does not exist: {remote}/{main}")
+        main_sha = git_output(repo, "rev-parse", main_ref)
+    if live_main_sha != main_sha:
         raise PublishError(
-            "mainline advanced before tagging; refusing to tag a different release scope: "
-            f"expected={expected_main_sha}, fetched={main_sha}, remote={live_main_sha}"
+            "mainline changed too quickly to verify its ancestry; wait and rerun: "
+            f"fetched={main_sha}, remote={live_main_sha}",
+            EXIT_WAITING,
+        )
+    if not is_ancestor(repo, expected_main_sha, main_ref):
+        raise PublishError(
+            "captured PR/MR merge SHA is no longer on the remote mainline; "
+            f"expected={expected_main_sha}, remote={main_sha}"
+        )
+    if main_sha != expected_main_sha:
+        log(
+            "mainline advanced after the captured PR/MR merge; tagging only the "
+            f"captured merge SHA {expected_main_sha}, not later tip {main_sha}"
         )
     tag = next_tag(repo, expected_main_sha) if requested == "auto" else requested
     if not SEMVER_RE.fullmatch(tag):
@@ -1689,10 +1773,19 @@ def create_and_push_tag(
     validate_identity(repo)
     git(repo, "tag", "-a", tag, expected_main_sha, "-m", f"Release {tag}", show=True)
     try:
+        if not fetch_branch(repo, remote, main):
+            raise PublishError(f"remote mainline does not exist: {remote}/{main}")
         live_main_sha = ls_remote_sha(repo, remote, f"refs/heads/{main}")
-        if live_main_sha != expected_main_sha:
+        fetched_main_sha = git_output(repo, "rev-parse", main_ref)
+        if live_main_sha != fetched_main_sha:
             raise PublishError(
-                "mainline advanced before the tag push; refusing to publish the tag: "
+                "mainline changed too quickly before the tag push; wait and rerun: "
+                f"fetched={fetched_main_sha}, remote={live_main_sha}",
+                EXIT_WAITING,
+            )
+        if not is_ancestor(repo, expected_main_sha, main_ref):
+            raise PublishError(
+                "captured PR/MR merge SHA left the remote mainline before the tag push: "
                 f"expected={expected_main_sha}, remote={live_main_sha}"
             )
         git(repo, "push", remote, f"refs/tags/{tag}", show=True)
@@ -1944,16 +2037,6 @@ def publish_test(args: argparse.Namespace) -> None:
         overlap_threshold,
         include_staged_paths=True,
     )
-    if divergence.is_large and not args.sync_mainline:
-        overlap_preview = ", ".join(divergence.overlapping_files[:8]) or "none"
-        raise PublishError(
-            "demand branch and mainline differ substantially; no commit or push was performed. "
-            f"source_behind={divergence.source_behind}, "
-            f"overlapping_files={len(divergence.overlapping_files)} ({overlap_preview}). "
-            "Review the difference, then rerun with --sync-mainline to merge only "
-            f"{args.remote}/{main} into {source} before publishing to {args.dev_branch}.",
-            EXIT_SYNC_RECOMMENDED,
-        )
     allowed_untracked_paths = normalize_allowed_untracked_paths(
         args.allow_untracked_path
     )
@@ -1964,6 +2047,10 @@ def publish_test(args: argparse.Namespace) -> None:
     )
     validate_identity(repo)
     if divergence.is_large:
+        log(
+            "demand/mainline divergence reached the configured threshold; "
+            "automatically syncing mainline into the demand branch"
+        )
         merge_mainline_into_source(repo, args.remote, main, source, args.verify)
     else:
         log(
@@ -2254,9 +2341,16 @@ def publish_production(args: argparse.Namespace) -> None:
         )
         if info.provider != "github":
             raise PublishError(
-                f"repository profile {profile.profile_id} production gate currently requires GitHub"
+                f"repository profile {profile.profile_id} production automation currently supports GitHub only"
             )
-        ensure_no_blocking_profile_runs(repo, command, info, profile)
+        wait_for_no_blocking_profile_runs(
+            repo,
+            command,
+            info,
+            profile,
+            args.wait_seconds,
+            args.poll_seconds,
+        )
     main = resolve_main_branch(repo, args.remote, args.main_branch)
     ensure_mainline_branch(main)
     source = prepare_source(
@@ -2308,11 +2402,17 @@ def publish_production(args: argparse.Namespace) -> None:
         raise PublishError(f"cannot refresh merged mainline: {args.remote}/{main}")
     remote_main_sha = git_output(repo, "rev-parse", main_ref)
     if remote_main_sha != merge_sha:
-        raise PublishError(
-            f"mainline advanced after the PR/MR merge; refusing to tag extra commits: merge={merge_sha}, latest={remote_main_sha}"
+        if not is_ancestor(repo, merge_sha, main_ref):
+            raise PublishError(
+                "captured PR/MR merge SHA is not on the refreshed remote mainline: "
+                f"merge={merge_sha}, latest={remote_main_sha}"
+            )
+        log(
+            "mainline advanced after the PR/MR merge; preserving release scope at "
+            f"captured merge SHA {merge_sha} instead of later tip {remote_main_sha}"
         )
-    if not is_ancestor(repo, source_sha, main_ref):
-        raise PublishError("merged mainline does not contain the published source SHA")
+    if not is_ancestor(repo, source_sha, merge_sha):
+        raise PublishError("captured PR/MR merge SHA does not contain the published source SHA")
     if profile:
         tag_decision = create_or_reuse_profile_tag(
             repo,
@@ -2324,6 +2424,8 @@ def publish_production(args: argparse.Namespace) -> None:
             command,
             info,
             profile,
+            wait_seconds=args.wait_seconds,
+            poll_seconds=args.poll_seconds,
         )
     else:
         tag, tag_sha = create_and_push_tag(
@@ -2419,7 +2521,7 @@ def show_plan(args: argparse.Namespace) -> None:
         },
         "test_flow": [
             (
-                "assess demand/mainline divergence and recommend mainline -> demand sync "
+                "assess demand/mainline divergence and automatically apply mainline -> demand sync "
                 f"only at behind>={behind_threshold} or "
                 f"overlap>={overlap_threshold} files"
             ),
@@ -2446,7 +2548,7 @@ def show_plan(args: argparse.Namespace) -> None:
                 "workflow": profile.production.workflow,
                 "blocking_statuses": list(profile.production.blocking_statuses),
                 "reuse_successful_tag_for_same_sha": profile.production.reuse_successful_tag_for_same_sha,
-                "require_reason_after_unsuccessful_tag": profile.production.require_reason_after_unsuccessful_tag,
+                "max_automatic_tag_retries": profile.production.max_automatic_tag_retries,
                 "monitor_required": profile.production.monitor_required,
                 "runtime_verification_required": profile.production.runtime_verification_required,
             }
@@ -2487,7 +2589,11 @@ def parser() -> argparse.ArgumentParser:
     common(test_parser)
     test_parser.add_argument("--dev-branch", default="dev")
     test_parser.add_argument("--main-branch", default="auto")
-    test_parser.add_argument("--sync-mainline", action="store_true")
+    test_parser.add_argument(
+        "--sync-mainline",
+        action="store_true",
+        help="deprecated compatibility flag; threshold sync is automatic",
+    )
     test_parser.add_argument(
         "--integration-verify",
         action="append",
@@ -2545,7 +2651,10 @@ def parser() -> argparse.ArgumentParser:
     prod_parser.add_argument("--request-title")
     prod_parser.add_argument("--request-body-file")
     prod_parser.add_argument("--tag", default="auto")
-    prod_parser.add_argument("--new-tag-reason")
+    prod_parser.add_argument(
+        "--new-tag-reason",
+        help="optional audit context; terminal-failure retry evidence is derived automatically",
+    )
     prod_parser.add_argument("--wait-seconds", type=int, default=600)
     prod_parser.add_argument("--poll-seconds", type=int, default=10)
     prod_parser.add_argument("--confirm-production", action="store_true")

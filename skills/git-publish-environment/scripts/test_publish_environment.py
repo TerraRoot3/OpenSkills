@@ -236,24 +236,34 @@ class PublishEnvironmentTests(unittest.TestCase):
         )
         self.assertTrue(payload["mainline_sync"]["dev_into_demand_forbidden"])
 
-    def test_pagepop_production_gate_blocks_active_workflow_run(self) -> None:
+    def test_pagepop_production_gate_waits_for_active_workflow_run(self) -> None:
         profile = PUBLISH.load_repository_profiles()[0]
         info = PUBLISH.parse_remote("git@github.com:pagepop/pagepop-agent.git", "auto")
+        run_lists = [
+            [
+                {
+                    "databaseId": 12,
+                    "status": "in_progress",
+                    "url": "https://github.com/pagepop/pagepop-agent/actions/runs/12",
+                }
+            ],
+            [],
+        ]
         with (
             mock.patch.object(
                 PUBLISH,
                 "github_workflow_runs",
-                return_value=[
-                    {
-                        "databaseId": 12,
-                        "status": "in_progress",
-                        "url": "https://github.com/pagepop/pagepop-agent/actions/runs/12",
-                    }
-                ],
+                side_effect=run_lists,
             ),
-            self.assertRaises(PUBLISH.PublishError) as raised,
+            mock.patch.object(PUBLISH.time, "sleep") as sleep,
+            mock.patch.object(PUBLISH, "remote_semver_tags_by_sha", return_value={}),
+            mock.patch.object(
+                PUBLISH,
+                "create_and_push_tag",
+                return_value=("v0.0.9", "a" * 40),
+            ) as create_tag,
         ):
-            PUBLISH.create_or_reuse_profile_tag(
+            decision = PUBLISH.create_or_reuse_profile_tag(
                 Path("."),
                 "origin",
                 "main",
@@ -263,8 +273,12 @@ class PublishEnvironmentTests(unittest.TestCase):
                 "gh-han",
                 info,
                 profile,
+                wait_seconds=1,
+                poll_seconds=1,
             )
-        self.assertIn("blocking run", str(raised.exception))
+        self.assertEqual(decision.tag, "v0.0.9")
+        sleep.assert_called_once_with(1)
+        create_tag.assert_called_once()
 
     def test_pagepop_production_gate_reuses_successful_exact_sha_tag(self) -> None:
         profile = PUBLISH.load_repository_profiles()[0]
@@ -307,7 +321,7 @@ class PublishEnvironmentTests(unittest.TestCase):
         self.assertTrue(decision.reused)
         create_tag.assert_not_called()
 
-    def test_pagepop_production_gate_requires_reason_after_failed_tag(
+    def test_pagepop_production_gate_automatically_retries_failed_tag(
         self,
     ) -> None:
         profile = PUBLISH.load_repository_profiles()[0]
@@ -325,32 +339,6 @@ class PublishEnvironmentTests(unittest.TestCase):
                     "headBranch": branch,
                 }
             ]
-
-        common_patches = (
-            mock.patch.object(PUBLISH, "github_workflow_runs", side_effect=fake_runs),
-            mock.patch.object(
-                PUBLISH,
-                "remote_semver_tags_by_sha",
-                return_value={"v0.0.8": expected_sha},
-            ),
-        )
-        with (
-            common_patches[0],
-            common_patches[1],
-            self.assertRaises(PUBLISH.PublishError) as raised,
-        ):
-            PUBLISH.create_or_reuse_profile_tag(
-                Path("."),
-                "origin",
-                "main",
-                expected_sha,
-                "auto",
-                None,
-                "gh-han",
-                info,
-                profile,
-            )
-        self.assertIn("--new-tag-reason", str(raised.exception))
 
         with (
             mock.patch.object(PUBLISH, "github_workflow_runs", side_effect=fake_runs),
@@ -371,7 +359,7 @@ class PublishEnvironmentTests(unittest.TestCase):
                 "main",
                 expected_sha,
                 "auto",
-                "retry after confirmed transient production failure",
+                None,
                 "gh-han",
                 info,
                 profile,
@@ -379,6 +367,132 @@ class PublishEnvironmentTests(unittest.TestCase):
         self.assertEqual(decision.tag, "v0.0.9")
         self.assertFalse(decision.reused)
         create_tag.assert_called_once()
+
+    def test_pagepop_production_gate_bounds_automatic_failed_tag_retries(
+        self,
+    ) -> None:
+        profile = PUBLISH.load_repository_profiles()[0]
+        info = PUBLISH.parse_remote("git@github.com:pagepop/pagepop-agent.git", "auto")
+        expected_sha = "d" * 40
+
+        def fake_runs(*_args: object, branch: str | None = None, **_kwargs: object):
+            if branch is None:
+                return []
+            return [
+                {
+                    "status": "completed",
+                    "conclusion": "failure",
+                    "headSha": expected_sha,
+                    "headBranch": branch,
+                }
+            ]
+
+        with (
+            mock.patch.object(PUBLISH, "github_workflow_runs", side_effect=fake_runs),
+            mock.patch.object(
+                PUBLISH,
+                "remote_semver_tags_by_sha",
+                return_value={"v0.0.8": expected_sha, "v0.0.9": expected_sha},
+            ),
+            mock.patch.object(PUBLISH, "create_and_push_tag") as create_tag,
+            self.assertRaises(PUBLISH.PublishError) as raised,
+        ):
+            PUBLISH.create_or_reuse_profile_tag(
+                Path("."),
+                "origin",
+                "main",
+                expected_sha,
+                "auto",
+                None,
+                "gh-han",
+                info,
+                profile,
+            )
+        self.assertIn("retry limit reached", str(raised.exception))
+        create_tag.assert_not_called()
+
+    def test_pagepop_production_gate_does_not_duplicate_unverified_tag(self) -> None:
+        profile = PUBLISH.load_repository_profiles()[0]
+        info = PUBLISH.parse_remote("git@github.com:pagepop/pagepop-agent.git", "auto")
+        expected_sha = "e" * 40
+
+        def fake_runs(*_args: object, branch: str | None = None, **_kwargs: object):
+            return []
+
+        with (
+            mock.patch.object(PUBLISH, "github_workflow_runs", side_effect=fake_runs),
+            mock.patch.object(
+                PUBLISH,
+                "remote_semver_tags_by_sha",
+                return_value={"v0.0.8": expected_sha},
+            ),
+            mock.patch.object(PUBLISH, "create_and_push_tag") as create_tag,
+            self.assertRaises(PUBLISH.PublishError) as raised,
+        ):
+            PUBLISH.create_or_reuse_profile_tag(
+                Path("."),
+                "origin",
+                "main",
+                expected_sha,
+                "auto",
+                None,
+                "gh-han",
+                info,
+                profile,
+            )
+        self.assertEqual(raised.exception.exit_code, PUBLISH.EXIT_WAITING)
+        self.assertIn("pending or unverifiable", str(raised.exception))
+        create_tag.assert_not_called()
+
+    def test_pagepop_production_gate_does_not_duplicate_active_provider_rerun(
+        self,
+    ) -> None:
+        profile = PUBLISH.load_repository_profiles()[0]
+        info = PUBLISH.parse_remote("git@github.com:pagepop/pagepop-agent.git", "auto")
+        expected_sha = "f" * 40
+
+        def fake_runs(*_args: object, branch: str | None = None, **_kwargs: object):
+            if branch is None:
+                return []
+            return [
+                {
+                    "status": "completed",
+                    "conclusion": "failure",
+                    "headSha": expected_sha,
+                    "headBranch": branch,
+                },
+                {
+                    "status": "in_progress",
+                    "conclusion": "",
+                    "headSha": expected_sha,
+                    "headBranch": branch,
+                },
+            ]
+
+        with (
+            mock.patch.object(PUBLISH, "github_workflow_runs", side_effect=fake_runs),
+            mock.patch.object(
+                PUBLISH,
+                "remote_semver_tags_by_sha",
+                return_value={"v0.0.8": expected_sha},
+            ),
+            mock.patch.object(PUBLISH, "create_and_push_tag") as create_tag,
+            self.assertRaises(PUBLISH.PublishError) as raised,
+        ):
+            PUBLISH.create_or_reuse_profile_tag(
+                Path("."),
+                "origin",
+                "main",
+                expected_sha,
+                "auto",
+                None,
+                "gh-han",
+                info,
+                profile,
+            )
+        self.assertEqual(raised.exception.exit_code, PUBLISH.EXIT_WAITING)
+        self.assertIn("pending or unverifiable", str(raised.exception))
+        create_tag.assert_not_called()
 
     def test_test_publish_rejects_dev_merged_into_demand_branch(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -912,23 +1026,12 @@ class PublishEnvironmentTests(unittest.TestCase):
         self.assertIn("do not start an integration checkout", diagnosis["recommendation"])
         self.assertIn("mainline into the demand branch", diagnosis["recommendation"])
 
-    def test_test_publish_stops_before_commit_or_push_for_large_divergence(
+    def test_test_publish_automatically_syncs_large_divergence(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temp:
             fixture = RepoFixture(Path(temp))
-            advance_remote_main(fixture, 2)
-            before_head = git_output(fixture.repo, "rev-parse", "HEAD")
-            before_dev = run(
-                [
-                    "git",
-                    "--git-dir",
-                    str(fixture.remote),
-                    "rev-parse",
-                    "refs/heads/dev",
-                ],
-                cwd=fixture.root,
-            ).stdout.strip()
+            _updater, latest_main = advance_remote_main(fixture, 2)
             staged = fixture.repo / "staged.txt"
             staged.write_text("staged\n", encoding="utf-8")
             git(fixture.repo, "add", staged.name)
@@ -943,18 +1046,24 @@ class PublishEnvironmentTests(unittest.TestCase):
                     "--main-behind-threshold",
                     "2",
                     "--commit-message",
-                    "feat: should not commit",
+                    "feat: publish after automatic mainline sync",
                 ],
                 cwd=fixture.repo,
-                check=False,
             )
 
-            self.assertEqual(result.returncode, PUBLISH.EXIT_SYNC_RECOMMENDED)
-            self.assertIn("no commit or push was performed", result.stderr)
-            self.assertEqual(git_output(fixture.repo, "rev-parse", "HEAD"), before_head)
+            self.assertIn("automatically syncing mainline", result.stdout)
+            payload = json.loads(result.stdout.splitlines()[-1])
+            source_sha = payload["source_sha"]
             self.assertEqual(
-                git(fixture.repo, "diff", "--cached", "--name-only").stdout.strip(),
-                staged.name,
+                git(
+                    fixture.repo,
+                    "merge-base",
+                    "--is-ancestor",
+                    latest_main,
+                    source_sha,
+                    check=False,
+                ).returncode,
+                0,
             )
             self.assertEqual(
                 run(
@@ -963,26 +1072,11 @@ class PublishEnvironmentTests(unittest.TestCase):
                         "--git-dir",
                         str(fixture.remote),
                         "rev-parse",
-                        "refs/heads/dev",
-                    ],
-                    cwd=fixture.root,
-                ).stdout.strip(),
-                before_dev,
-            )
-            self.assertNotEqual(
-                run(
-                    [
-                        "git",
-                        "--git-dir",
-                        str(fixture.remote),
-                        "show-ref",
-                        "--verify",
                         "refs/heads/feature/test",
                     ],
                     cwd=fixture.root,
-                    check=False,
-                ).returncode,
-                0,
+                ).stdout.strip(),
+                source_sha,
             )
 
     def test_test_publish_explicitly_syncs_mainline_never_dev_into_source(self) -> None:
@@ -1030,39 +1124,32 @@ class PublishEnvironmentTests(unittest.TestCase):
                 0,
             )
 
-    def test_tag_stops_if_mainline_advances_before_push(self) -> None:
+    def test_tag_keeps_captured_merge_sha_when_mainline_advances(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             fixture = RepoFixture(Path(temp))
             main_sha = git_output(fixture.repo, "rev-parse", "main")
             git(fixture.repo, "tag", "-a", "v0.0.1", main_sha, "-m", "Release v0.0.1")
             git(fixture.repo, "push", "origin", "refs/tags/v0.0.1")
-            advanced_sha = "f" * 40
-            head_reads = 0
-            original_ls_remote = PUBLISH.ls_remote_sha
+            _updater, advanced_sha = advance_remote_main(fixture, 1)
 
-            def fake_ls_remote(repo: Path, remote: str, ref: str) -> str | None:
-                nonlocal head_reads
-                if ref == "refs/heads/main":
-                    head_reads += 1
-                    return main_sha if head_reads == 1 else advanced_sha
-                return original_ls_remote(repo, remote, ref)
+            tag, tag_sha = PUBLISH.create_and_push_tag(
+                fixture.repo,
+                "origin",
+                "main",
+                main_sha,
+                "auto",
+            )
 
-            with (
-                mock.patch.object(PUBLISH, "ls_remote_sha", side_effect=fake_ls_remote),
-                self.assertRaises(PUBLISH.PublishError) as raised,
-            ):
-                PUBLISH.create_and_push_tag(
+            self.assertEqual(tag, "v0.0.2")
+            self.assertEqual(tag_sha, main_sha)
+            self.assertNotEqual(advanced_sha, main_sha)
+            self.assertEqual(
+                PUBLISH.ls_remote_sha(
                     fixture.repo,
                     "origin",
-                    "main",
-                    main_sha,
-                    "auto",
-                )
-
-            self.assertIn("advanced before the tag push", str(raised.exception))
-            self.assertIsNone(PUBLISH.rev_parse(fixture.repo, "refs/tags/v0.0.2"))
-            self.assertIsNone(
-                original_ls_remote(fixture.repo, "origin", "refs/tags/v0.0.2")
+                    "refs/tags/v0.0.2^{}",
+                ),
+                main_sha,
             )
 
     def test_github_production_merges_then_tags_exact_main_sha(self) -> None:

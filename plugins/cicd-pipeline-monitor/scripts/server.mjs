@@ -106,7 +106,7 @@ const toolDefinitions = [
   {
     name: "trigger_cicd_run",
     title: "Trigger CI/CD Run",
-    description: "Trigger one explicitly confirmed GitHub Actions workflow_dispatch or GitLab pipeline and render the only live monitor card needed for that run. Call once. A successful result already mounts the monitor, so never call open_cicd_monitor for the same run afterward and never retry this rendering tool after an uncertain response.",
+    description: "Trigger one authorized GitHub Actions workflow_dispatch or GitLab pipeline and render the only live monitor card needed for that run. A user's request to publish to the resolved environment supplies that authorization. Call once; after an uncertain response, inspect provider state before any retry.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -119,7 +119,7 @@ const toolDefinitions = [
         confirmed: {
           type: "boolean",
           const: true,
-          description: "Must be true only after the user confirms the exact provider, repository, workflow or pipeline, ref, environment, and input or variable names."
+          description: "True when the user requested publication to this exact provider, repository, workflow or pipeline, ref, environment, and input or variable-name set."
         },
         inputs: {
           type: "object",
@@ -221,7 +221,14 @@ function redactText(value, redactions = []) {
     .slice(0, 1200);
 }
 
-function runCommand(command, args, { cwd, input, timeout = 30_000, allowFailure = false, redactions = [] } = {}) {
+function runCommand(command, args, {
+  cwd,
+  input,
+  timeout = 30_000,
+  allowFailure = false,
+  redactions = [],
+  envOverrides = {}
+} = {}) {
   const result = spawnSync(command, args, {
     cwd,
     input,
@@ -231,6 +238,7 @@ function runCommand(command, args, { cwd, input, timeout = 30_000, allowFailure 
     windowsHide: true,
     env: {
       ...process.env,
+      ...envOverrides,
       GH_PROMPT_DISABLED: "1",
       GIT_TERMINAL_PROMPT: "0",
       GLAB_PAGER: "cat",
@@ -374,22 +382,110 @@ function expectedGithubLogin(repo) {
   return "";
 }
 
+function githubAuthForLogin(repo, requestedLogin) {
+  const credentialEnv = { GH_TOKEN: "", GITHUB_TOKEN: "" };
+  const token = runCommand(
+    GH_COMMAND,
+    ["auth", "token", "--hostname", repo.host, "--user", requestedLogin],
+    {
+      cwd: repo.repoRoot,
+      timeout: 20_000,
+      envOverrides: credentialEnv
+    }
+  ).stdout.trim();
+  if (!token) throw new Error(`无法读取 ${repo.host} 账号 ${requestedLogin} 的本机 gh 凭据。`);
+
+  const commandEnv = { GH_TOKEN: token, GITHUB_TOKEN: "" };
+  const login = runCommand(
+    GH_COMMAND,
+    ["api", "--hostname", repo.host, "user", "--jq", ".login"],
+    {
+      cwd: repo.repoRoot,
+      timeout: 20_000,
+      envOverrides: commandEnv,
+      redactions: [token]
+    }
+  ).stdout.trim();
+  if (!login || login.toLowerCase() !== requestedLogin.toLowerCase()) {
+    throw new Error(
+      `GitHub 凭据账号不匹配：请求 ${requestedLogin}，实际 ${login || "<missing>"}。`
+    );
+  }
+  return { login, envOverrides: commandEnv, redactions: [token] };
+}
+
+function configuredGithubAccounts(repo) {
+  const payload = parseJson(
+    runCommand(
+      GH_COMMAND,
+      ["auth", "status", "--hostname", repo.host, "--json", "hosts"],
+      {
+        cwd: repo.repoRoot,
+        timeout: 20_000,
+        envOverrides: { GH_TOKEN: "", GITHUB_TOKEN: "" }
+      }
+    ).stdout,
+    "GitHub 登录账号"
+  );
+  const entries = Array.isArray(payload?.hosts?.[repo.host])
+    ? payload.hosts[repo.host]
+    : [];
+  const unique = new Map();
+  for (const entry of entries) {
+    const login = String(entry?.login || "").trim();
+    if (!login) continue;
+    const key = login.toLowerCase();
+    const previous = unique.get(key);
+    unique.set(key, {
+      login,
+      active: Boolean(entry?.active) || Boolean(previous?.active)
+    });
+  }
+  return [...unique.values()].sort((left, right) => Number(right.active) - Number(left.active));
+}
+
+function runGithubCommand(repo, auth, args, options = {}) {
+  return runCommand(GH_COMMAND, args, {
+    ...options,
+    cwd: options.cwd || repo.repoRoot,
+    envOverrides: {
+      ...(options.envOverrides || {}),
+      ...auth.envOverrides
+    },
+    redactions: [...(options.redactions || []), ...auth.redactions]
+  });
+}
+
+function githubAuthContext(repo) {
+  const expected = expectedGithubLogin(repo);
+  if (expected) return githubAuthForLogin(repo, expected);
+
+  const accounts = configuredGithubAccounts(repo);
+  if (!accounts.length) throw new Error(`未找到 ${repo.host} 的已登录 GitHub 账号。`);
+  const attempted = [];
+  for (const account of accounts) {
+    attempted.push(account.login);
+    try {
+      const auth = githubAuthForLogin(repo, account.login);
+      const access = runGithubCommand(
+        repo,
+        auth,
+        ["repo", "view", ghRepoId(repo), "--json", "nameWithOwner"],
+        { timeout: 20_000, allowFailure: true }
+      );
+      if (access.ok) return auth;
+    } catch {
+      // Try the next locally authenticated account without changing gh's global active account.
+    }
+  }
+  throw new Error(
+    `已登录 GitHub 账号均无法访问 ${repo.projectPath}：${attempted.join(", ")}。`
+  );
+}
+
 function checkAuth(repo) {
   if (repo.provider === "github") {
-    runCommand(GH_COMMAND, ["auth", "status", "--active", "--hostname", repo.host], {
-      cwd: repo.repoRoot,
-      timeout: 20_000
-    });
-    const login = runCommand(GH_COMMAND, ["api", "--hostname", repo.host, "user", "--jq", ".login"], {
-      cwd: repo.repoRoot,
-      timeout: 20_000
-    }).stdout.trim();
-    if (!login) throw new Error(`无法确认 ${repo.host} 的当前 GitHub 账号。`);
-    const expected = expectedGithubLogin(repo);
-    if (expected && login.toLowerCase() !== expected.toLowerCase()) {
-      throw new Error(`GitHub 账号不匹配：仓库 Owner 要求 ${expected}，当前账号为 ${login}。请在插件外切换账号后重试。`);
-    }
-    return login;
+    return githubAuthContext(repo).login;
   } else {
     runCommand(GLAB_COMMAND, ["auth", "status", "--hostname", repo.host], {
       cwd: repo.repoRoot,
@@ -806,13 +902,14 @@ function pendingGithubRun(repo, input) {
 }
 
 function listGithubTargets(repo) {
-  const activeLogin = checkAuth(repo);
+  const auth = githubAuthContext(repo);
+  const activeLogin = auth.login;
   const repoId = ghRepoId(repo);
-  const metadata = parseJson(runCommand(GH_COMMAND, ["repo", "view", repoId, "--json", "defaultBranchRef,url,nameWithOwner"], {
+  const metadata = parseJson(runGithubCommand(repo, auth, ["repo", "view", repoId, "--json", "defaultBranchRef,url,nameWithOwner"], {
     cwd: repo.repoRoot,
     timeout: 30_000
   }).stdout, "GitHub 仓库信息") || {};
-  const workflows = parseJson(runCommand(GH_COMMAND, ["workflow", "list", "--repo", repoId, "--all", "--limit", "100", "--json", "id,name,path,state"], {
+  const workflows = parseJson(runGithubCommand(repo, auth, ["workflow", "list", "--repo", repoId, "--all", "--limit", "100", "--json", "id,name,path,state"], {
     cwd: repo.repoRoot,
     timeout: 30_000
   }).stdout, "GitHub workflow 列表");
@@ -877,13 +974,14 @@ function listTargets(input) {
 
 const GITHUB_RUN_FIELDS = "databaseId,workflowDatabaseId,workflowName,name,number,status,conclusion,createdAt,startedAt,updatedAt,url,headBranch,headSha,event";
 
-function listGithubRuns(repo, input, { includeJobs = false } = {}) {
+function listGithubRuns(repo, input, { includeJobs = false, auth = null } = {}) {
+  const commandAuth = auth || githubAuthContext(repo);
   const repoId = ghRepoId(repo);
   const args = ["run", "list", "--repo", repoId, "--all", "--limit", "30"];
   if (input.workflow) args.push("--workflow", String(input.workflow));
   if (input.ref) args.push("--branch", input.ref);
   args.push("--json", GITHUB_RUN_FIELDS);
-  const runs = parseJson(runCommand(GH_COMMAND, args, { cwd: repo.repoRoot, timeout: 30_000 }).stdout, "GitHub run 列表");
+  const runs = parseJson(runGithubCommand(repo, commandAuth, args, { cwd: repo.repoRoot, timeout: 30_000 }).stdout, "GitHub run 列表");
   const threshold = input.triggeredAt ? new Date(input.triggeredAt).getTime() - 30_000 : 0;
   const candidates = (Array.isArray(runs) ? runs : []).filter((run) => {
     if (input.ref && run.headBranch !== input.ref) return false;
@@ -894,13 +992,14 @@ function listGithubRuns(repo, input, { includeJobs = false } = {}) {
   if (!candidates.length) return null;
   const run = candidates.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
   if (!includeJobs) return run;
-  return getGithubRun(repo, { ...input, runId: String(run.databaseId) });
+  return getGithubRun(repo, { ...input, runId: String(run.databaseId) }, commandAuth);
 }
 
-function getGithubRun(repo, input) {
-  if (!input.runId) return listGithubRuns(repo, input);
+function getGithubRun(repo, input, auth = null) {
+  const commandAuth = auth || githubAuthContext(repo);
+  if (!input.runId) return listGithubRuns(repo, input, { auth: commandAuth });
   const fields = `${GITHUB_RUN_FIELDS},jobs`;
-  return parseJson(runCommand(GH_COMMAND, ["run", "view", String(input.runId), "--repo", ghRepoId(repo), "--json", fields], {
+  return parseJson(runGithubCommand(repo, commandAuth, ["run", "view", String(input.runId), "--repo", ghRepoId(repo), "--json", fields], {
     cwd: repo.repoRoot,
     timeout: 30_000
   }).stdout, "GitHub run 状态");
@@ -941,12 +1040,15 @@ function getRunStatus(input) {
   const repo = discoverRepository(input.repoPath, input.provider);
   const persisted = restoreProviderSuccess(repo, input);
   if (persisted) return persisted;
-  checkAuth(repo);
   if (repo.provider === "github") {
-    const run = input.runId ? getGithubRun(repo, input) : listGithubRuns(repo, input, { includeJobs: true });
+    const auth = githubAuthContext(repo);
+    const run = input.runId
+      ? getGithubRun(repo, input, auth)
+      : listGithubRuns(repo, input, { includeJobs: true, auth });
     const snapshot = run ? normalizeGithubRun(repo, run, input) : pendingGithubRun(repo, input);
     return persistProviderSuccess(repo, input, snapshot);
   }
+  checkAuth(repo);
   const { pipeline, jobs } = getGitlabPipeline(repo, input);
   return persistProviderSuccess(repo, input, normalizeGitlabPipeline(repo, pipeline, jobs, input));
 }
@@ -956,9 +1058,9 @@ function triggerGithubRun(repo, input) {
   const ref = requireText(input.ref, "ref");
   const inputs = validateStringMap(input.inputs, "GitHub input", /^[A-Za-z_][A-Za-z0-9_-]*$/);
   const secretValues = Object.values(inputs);
-  checkAuth(repo);
+  const auth = githubAuthContext(repo);
   const triggeredAt = new Date().toISOString();
-  runCommand(GH_COMMAND, ["workflow", "run", workflow, "--repo", ghRepoId(repo), "--ref", ref, "--json"], {
+  runGithubCommand(repo, auth, ["workflow", "run", workflow, "--repo", ghRepoId(repo), "--ref", ref, "--json"], {
     cwd: repo.repoRoot,
     input: JSON.stringify(inputs),
     timeout: 45_000,
@@ -972,7 +1074,7 @@ function triggerGithubRun(repo, input) {
     environment: input.environment || "",
     triggeredAt
   };
-  const run = listGithubRuns(repo, monitorInput, { includeJobs: true });
+  const run = listGithubRuns(repo, monitorInput, { includeJobs: true, auth });
   const snapshot = run ? normalizeGithubRun(repo, run, monitorInput) : pendingGithubRun(repo, monitorInput);
   return persistProviderSuccess(repo, monitorInput, snapshot);
 }
@@ -1007,7 +1109,7 @@ function triggerGitlabRun(repo, input) {
 }
 
 function triggerRun(input) {
-  if (input.confirmed !== true) throw new Error("触发流水线前必须确认完整目标并传入 confirmed=true。");
+  if (input.confirmed !== true) throw new Error("该环境尚未获得发布授权；需要传入 confirmed=true。");
   requireText(input.environment, "environment");
   const repo = discoverRepository(input.repoPath, input.provider);
   return repo.provider === "github" ? triggerGithubRun(repo, input) : triggerGitlabRun(repo, input);
@@ -1017,12 +1119,15 @@ function openMonitor(input) {
   const repo = discoverRepository(input.repoPath, input.provider);
   const persisted = restoreProviderSuccess(repo, input);
   if (persisted) return persisted;
-  checkAuth(repo);
   if (repo.provider === "github") {
-    const run = input.runId ? getGithubRun(repo, input) : listGithubRuns(repo, input, { includeJobs: true });
+    const auth = githubAuthContext(repo);
+    const run = input.runId
+      ? getGithubRun(repo, input, auth)
+      : listGithubRuns(repo, input, { includeJobs: true, auth });
     if (!run) throw new Error("没有找到匹配的 GitHub Actions run。");
     return persistProviderSuccess(repo, input, normalizeGithubRun(repo, run, input));
   }
+  checkAuth(repo);
   const { pipeline, jobs } = getGitlabPipeline(repo, input);
   return persistProviderSuccess(repo, input, normalizeGitlabPipeline(repo, pipeline, jobs, input));
 }
