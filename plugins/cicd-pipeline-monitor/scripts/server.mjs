@@ -809,7 +809,7 @@ function normalizeGithubRun(repo, run, input = {}) {
   const failedJobs = jobs.filter((job) => job.status === "failed").map((job) => job.name);
   const runId = String(run.databaseId || input.runId || "");
   const workflow = String(input.workflow || run.workflowDatabaseId || run.workflowName || run.name || "");
-  const ref = run.headBranch || input.ref || "";
+  const ref = run._monitorRequestedRef || run.headBranch || input.ref || "";
   return {
     kind: "cicd-monitor",
     provider: "github",
@@ -977,22 +977,51 @@ const GITHUB_RUN_FIELDS = "databaseId,workflowDatabaseId,workflowName,name,numbe
 function listGithubRuns(repo, input, { includeJobs = false, auth = null } = {}) {
   const commandAuth = auth || githubAuthContext(repo);
   const repoId = ghRepoId(repo);
-  const args = ["run", "list", "--repo", repoId, "--all", "--limit", "30"];
-  if (input.workflow) args.push("--workflow", String(input.workflow));
-  if (input.ref) args.push("--branch", input.ref);
-  args.push("--json", GITHUB_RUN_FIELDS);
-  const runs = parseJson(runGithubCommand(repo, commandAuth, args, { cwd: repo.repoRoot, timeout: 30_000 }).stdout, "GitHub run 列表");
+  const baseArgs = ["run", "list", "--repo", repoId, "--all", "--limit", "30"];
+  if (input.workflow) baseArgs.push("--workflow", String(input.workflow));
   const threshold = input.triggeredAt ? new Date(input.triggeredAt).getTime() - 30_000 : 0;
-  const candidates = (Array.isArray(runs) ? runs : []).filter((run) => {
-    if (input.ref && run.headBranch !== input.ref) return false;
+  const matchingRuns = (runs, resolvedRefSha = "") => (Array.isArray(runs) ? runs : []).filter((run) => {
+    if (input.ref && run.headBranch !== input.ref && (!resolvedRefSha || run.headSha !== resolvedRefSha)) return false;
     if (input.triggeredAt && run.event && run.event !== "workflow_dispatch") return false;
     if (threshold && new Date(run.createdAt).getTime() < threshold) return false;
     return true;
   });
+
+  const branchArgs = [...baseArgs];
+  if (input.ref) branchArgs.push("--branch", input.ref);
+  branchArgs.push("--json", GITHUB_RUN_FIELDS);
+  const branchRuns = parseJson(runGithubCommand(repo, commandAuth, branchArgs, {
+    cwd: repo.repoRoot,
+    timeout: 30_000
+  }).stdout, "GitHub run 列表");
+  let candidates = matchingRuns(branchRuns);
+  let matchedResolvedRef = false;
+
+  if (!candidates.length && input.ref) {
+    const resolvedRef = runGithubCommand(
+      repo,
+      commandAuth,
+      ["api", "--hostname", repo.host, `repos/${repo.projectPath}/commits/${encodeURIComponent(input.ref)}`, "--jq", ".sha"],
+      { cwd: repo.repoRoot, timeout: 20_000, allowFailure: true }
+    );
+    const resolvedRefSha = resolvedRef.ok ? resolvedRef.stdout.trim() : "";
+    if (resolvedRefSha) {
+      const commitArgs = [...baseArgs, "--commit", resolvedRefSha, "--json", GITHUB_RUN_FIELDS];
+      const commitRuns = parseJson(runGithubCommand(repo, commandAuth, commitArgs, {
+        cwd: repo.repoRoot,
+        timeout: 30_000
+      }).stdout, "GitHub run 列表");
+      candidates = matchingRuns(commitRuns, resolvedRefSha);
+      matchedResolvedRef = candidates.length > 0;
+    }
+  }
+
   if (!candidates.length) return null;
   const run = candidates.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
-  if (!includeJobs) return run;
-  return getGithubRun(repo, { ...input, runId: String(run.databaseId) }, commandAuth);
+  const selected = includeJobs
+    ? getGithubRun(repo, { ...input, runId: String(run.databaseId) }, commandAuth)
+    : run;
+  return matchedResolvedRef ? { ...selected, _monitorRequestedRef: input.ref } : selected;
 }
 
 function getGithubRun(repo, input, auth = null) {

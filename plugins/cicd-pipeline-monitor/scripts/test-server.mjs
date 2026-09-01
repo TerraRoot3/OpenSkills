@@ -88,7 +88,8 @@ if (args[0] === "auth" && args[1] === "status") {
   process.exit(10);
 } else if (args[0] === "api") {
   requireEphemeralCredential();
-  output(selectedLogin);
+  const endpoint = args.find((item) => item.startsWith("repos/"));
+  output(endpoint?.includes("/commits/") ? "1234567890abcdef" : selectedLogin);
 } else if (args[0] === "repo" && args[1] === "view") {
   requireEphemeralCredential();
   const repository = repositoryArg();
@@ -113,12 +114,15 @@ if (args[0] === "auth" && args[1] === "status") {
 } else if (args[0] === "run" && args[1] === "list") {
   requireEphemeralCredential();
   requireRepositoryAccess(repositoryArg());
-  output([{
+  const branch = args.includes("--branch") ? args[args.indexOf("--branch") + 1] : "";
+  const commit = args.includes("--commit") ? args[args.indexOf("--commit") + 1] : "";
+  const matches = (!branch || branch === "main") && (!commit || commit === "1234567890abcdef");
+  output(matches ? [{
     databaseId: 100, workflowDatabaseId: 11, workflowName: "Release to environment with a deliberately long name",
     name: "Release", number: 44, status: "in_progress", conclusion: "", event: "workflow_dispatch",
     createdAt: new Date().toISOString(), startedAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     url: "https://github.com/acme/widgets/actions/runs/100", headBranch: "main", headSha: "1234567890abcdef"
-  }]);
+  }] : []);
 } else if (args[0] === "run" && args[1] === "view") {
   requireEphemeralCredential();
   requireRepositoryAccess(repositoryArg());
@@ -287,6 +291,17 @@ try {
   assert.equal(ghTriggered.structuredContent.runId, "100");
   assert.match(ghTriggered._meta.ui.resourceUri, /redirectOrigin=https%3A%2F%2Fgithub\.com/);
 
+  const ghTagMonitor = await client.tool("open_cicd_monitor", {
+    repoPath: githubRepo,
+    provider: "github",
+    workflow: ".github/workflows/release.yml",
+    ref: "v1.2.3",
+    environment: "测网"
+  });
+  assert.equal(ghTagMonitor.isError, undefined);
+  assert.equal(ghTagMonitor.structuredContent.runId, "100");
+  assert.equal(ghTagMonitor.structuredContent.ref, "v1.2.3");
+
   for (const [runId, expected] of [["101", "success"], ["102", "failed"], ["103", "cancelled"], ["104", "skipped"]]) {
     const status = await client.tool("get_cicd_run_status", {
       repoPath: githubRepo,
@@ -414,6 +429,8 @@ try {
   assert.ok(resource.result.contents[0].text.includes("已从当前卡片的临时状态恢复真实成功结果"));
   assert.ok(!resource.result.contents[0].text.includes("已从卡片持久状态恢复真实成功结果"));
   assert.ok(resource.result.contents[0].text.includes("void refresh({ force: true })"));
+  assert.ok(resource.result.contents[0].text.includes("function renderToolOutput"));
+  assert.ok(resource.result.contents[0].text.includes("读取失败"));
   assert.ok(resource.result.contents[0].text.includes('id="cicd-jobs-track"'));
   assert.ok(resource.result.contents[0].text.includes("function selectJobFocusIndex"));
   assert.ok(resource.result.contents[0].text.includes("requestAnimationFrame(positionJobTrack)"));

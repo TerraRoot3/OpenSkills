@@ -816,6 +816,39 @@
     return result?.structuredContent || result?.result?.structuredContent || result?.mcp_tool_result?.structuredContent || null;
   }
 
+  function renderInitialError(error, toolInput = {}) {
+    if (state.timer) clearTimeout(state.timer);
+    state.timer = null;
+    state.failures = 3;
+    const provider = toolInput.provider === "gitlab" ? "gitlab" : "github";
+    const icon = $("#cicd-provider-icon");
+    icon.className = `cicd-provider-icon is-${provider}`;
+    icon.innerHTML = providerIcon(provider);
+    $("#cicd-provider").textContent = provider === "gitlab" ? "GitLab CI/CD" : "GitHub Actions";
+    $("#cicd-title").textContent = toolInput.workflow || "CI/CD 流水线读取失败";
+    $("#cicd-status").className = "cicd-status is-failed";
+    $("#cicd-status-label").textContent = "读取失败";
+    $("#cicd-ref").textContent = toolInput.ref || "—";
+    $("#cicd-message").textContent = error?.message || String(error) || "流水线状态读取失败。";
+    $("#cicd-message").className = "cicd-message is-error";
+    $("#cicd-message").hidden = false;
+    $("#cicd-updated").textContent = "未开始监控";
+    $("#cicd-open").disabled = true;
+    $("#cicd-refresh").disabled = true;
+    $("#cicd-manual-success").hidden = true;
+    reportHeight();
+  }
+
+  function renderToolOutput(output, toolInput = {}) {
+    try {
+      const payload = output?.kind === "cicd-monitor" ? output : extractPayload(output);
+      if (!payload) throw new Error("流水线状态响应为空。");
+      render(payload);
+    } catch (error) {
+      renderInitialError(error, toolInput);
+    }
+  }
+
   async function refresh({ force = false } = {}) {
     if (state.refreshing || !state.snapshot?.monitor || isManuallyCompleted()) return;
     if (!force && !shouldAutoPoll()) return;
@@ -917,7 +950,7 @@
   window.addEventListener("openai:set_globals", (event) => {
     const globals = event.detail?.globals || {};
     applyTheme(globals);
-    if (globals.toolOutput) render(globals.toolOutput);
+    if (globals.toolOutput) renderToolOutput(globals.toolOutput, globals.toolInput || {});
   }, { passive: true });
 
   if (typeof ResizeObserver === "function") {
@@ -925,6 +958,6 @@
     new ResizeObserver(positionJobTrack).observe($("#cicd-jobs"));
   }
   applyTheme(window.openai?.hostContext || {});
-  if (window.openai?.toolOutput) render(window.openai.toolOutput);
+  if (window.openai?.toolOutput) renderToolOutput(window.openai.toolOutput, window.openai.toolInput || {});
 })();
 </script>

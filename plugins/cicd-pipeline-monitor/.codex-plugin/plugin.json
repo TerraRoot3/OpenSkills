@@ -1,6 +1,6 @@
 {
   "name": "cicd-pipeline-monitor",
-  "version": "0.1.0+codex.20260821024146",
+  "version": "0.1.0+codex.20260901022318",
   "description": "Trigger and monitor GitHub Actions or GitLab pipelines with repository-aware local GitHub account selection.",
   "author": {
     "name": "Han Baokun"
