@@ -45,7 +45,7 @@ Shared Codex skills for cross-machine installation and team reuse.
   - Adds a compact project selector at the top of the workbench for switching among local Git repositories
   - Saves one projects directory, discovers repositories within three child-directory levels, and refreshes that directory on demand; macOS also gets a native directory chooser
   - Falls back to repositories already known to Codex until a projects directory is configured
-  - Defaults to the current conversation's repository when opened from a project task, and restores the most recently viewed repository from a global or task-panel entry
+  - Distinguishes message launches from pinned-tab launches: project-task messages open that conversation's repository, while the pinned tab opens the project selector with the most recently viewed repository preselected
   - Project selection only changes the displayed repository snapshot; it never checks out a branch or mutates either repository
   - Opens as a compact repository card in a Codex conversation and expands into a fullscreen Git workbench
   - Matches Codex light and dark themes with compact native spacing and no extra inline-card height

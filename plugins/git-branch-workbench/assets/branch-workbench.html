@@ -657,6 +657,7 @@
   }
   const state = {
     snapshot: null,
+    launchSource: "",
     projectsRootPath: "",
     selectedHash: typeof savedWidgetState.selectedHash === "string" ? savedWidgetState.selectedHash : null,
     expandedGroups: {
@@ -795,6 +796,12 @@
 
   function isGitWatchState(value) {
     return value?.kind === "gitWatchState" && typeof value.signature === "string";
+  }
+
+  function applyLaunchSource(value) {
+    if (value !== "message" && value !== "tab") return;
+    state.launchSource = value;
+    root.dataset.launchSource = value;
   }
 
   function setText(selector, value) {
@@ -2005,6 +2012,7 @@
   }
 
   function render(snapshot) {
+    applyLaunchSource(snapshot?.launchSource);
     if (snapshot?.view === "home" || !Array.isArray(snapshot?.commits)) {
       renderHome(snapshot || {});
       return;
@@ -2132,7 +2140,7 @@
     const repoPath = $("#gbw-home-repository").value;
     if (!repoPath) return;
     $("#gbw-home-error").hidden = true;
-    await runTool("open_git_branch_workbench", { repoPath, limit: 200 }, "正在打开仓库…");
+    await runTool("get_git_snapshot", { repoPath, limit: 200 }, "正在打开仓库…");
   });
 
   $("#gbw-repository").addEventListener("change", async (event) => {

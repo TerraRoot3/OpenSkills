@@ -9,8 +9,8 @@ import { createHash } from "node:crypto";
 import readline from "node:readline";
 
 const SERVER_NAME = "git-branch-workbench";
-const SERVER_VERSION = "0.7.0";
-const TEMPLATE_URI = "ui://git-branch-workbench/v13.html";
+const SERVER_VERSION = "0.8.0";
+const TEMPLATE_URI = "ui://git-branch-workbench/v14.html";
 const DEFAULT_COMMIT_LIMIT = 200;
 const MAX_COMMIT_LIMIT = 200;
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -64,7 +64,7 @@ const toolDefinitions = [
   {
     name: "open_git_branch_workbench_home",
     title: "Git Branch Workbench",
-    description: "Open Git Branch Workbench with the most recently accessed valid repository, or show a selector populated from the saved projects directory and local Git projects already known to Codex.",
+    description: "Open the Git Branch Workbench tab on its repository selector, with the most recently accessed valid repository preselected when available.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -80,7 +80,7 @@ const toolDefinitions = [
       ...widgetMeta,
       ui: {
         resourceUri: TEMPLATE_URI,
-        visibility: ["app", "model"]
+        visibility: ["app"]
       },
       "openai/ui": {
         entrypoints: [{ type: "global" }, { type: "thread" }],
@@ -482,6 +482,7 @@ function rememberRecentRepository(repoRoot) {
     repoPaths,
     projectsRootPath: previous.projectsRootPath
   });
+  repositoryDiscoveryCache.expiresAt = 0;
 }
 
 function rememberProjectsRoot(projectsRootPath) {
@@ -1369,6 +1370,10 @@ function toolResult(snapshot, render = false) {
   return result;
 }
 
+function withLaunchSource(snapshot, launchSource) {
+  return { ...snapshot, launchSource };
+}
+
 function watchResult(watchState) {
   return {
     structuredContent: watchState,
@@ -1377,43 +1382,21 @@ function watchResult(watchState) {
 }
 
 function homeResult() {
-  const recentRepoPath = readRecentRepositoryState().repoPath;
-  if (recentRepoPath) {
-    try {
-      return toolResult(getSnapshot({ repoPath: recentRepoPath }), true);
-    } catch (error) {
-      return {
-        structuredContent: {
-          schemaVersion: 5,
-          view: "home",
-          recentRepoPath,
-          projectsRootPath: readRecentRepositoryState().projectsRootPath,
-          repositories: discoverRepositories(),
-          error: error instanceof Error ? error.message : String(error)
-        },
-        content: [{ type: "text", text: "The recent Git repository is no longer available. Choose another repository." }],
-        _meta: {
-          ui: { resourceUri: TEMPLATE_URI },
-          "openai/outputTemplate": TEMPLATE_URI
-        }
-      };
-    }
-  }
-  return {
-    structuredContent: {
-      schemaVersion: 5,
-      view: "home",
-      recentRepoPath: "",
-      projectsRootPath: readRecentRepositoryState().projectsRootPath,
-      repositories: discoverRepositories(),
-      error: ""
-    },
-    content: [{ type: "text", text: "Choose a local Git repository to open in Git Branch Workbench." }],
-    _meta: {
-      ui: { resourceUri: TEMPLATE_URI },
-      "openai/outputTemplate": TEMPLATE_URI
-    }
-  };
+  const recentState = readRecentRepositoryState();
+  const repositories = discoverRepositories();
+  const recentRepoPath = repositories.some((repository) => repository.path === recentState.repoPath)
+    ? recentState.repoPath
+    : "";
+  return toolResult(withLaunchSource({
+    schemaVersion: 6,
+    view: "home",
+    recentRepoPath,
+    projectsRootPath: recentState.projectsRootPath,
+    repositories,
+    error: recentState.repoPath && !recentRepoPath
+      ? "最近查看的 Git 仓库已不可用，请选择其他项目。"
+      : ""
+  }, "tab"), true);
 }
 
 async function handleRequest(message) {
@@ -1495,7 +1478,7 @@ async function handleRequest(message) {
         return;
       }
       if (toolName === "open_git_branch_workbench") {
-        rpcResult(id, toolResult(getSnapshot(args), true));
+        rpcResult(id, toolResult(withLaunchSource(getSnapshot(args), "message"), true));
         return;
       }
       if (toolName === "switch_git_branch") {
