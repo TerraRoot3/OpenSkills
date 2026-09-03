@@ -615,6 +615,50 @@ def resolve_main_branch(repo: Path, remote: str, requested: str) -> str:
     raise PublishError("cannot resolve mainline; pass --main-branch explicitly")
 
 
+def resolve_plan_main_branch(
+    repo: Path, remote: str, requested: str
+) -> tuple[str, str]:
+    if requested != "auto":
+        return requested, "explicit"
+    result = git(
+        repo,
+        "ls-remote",
+        "--symref",
+        remote,
+        "HEAD",
+        "refs/heads/main",
+        "refs/heads/master",
+        check=False,
+    )
+    if result.returncode == 0:
+        candidates: set[str] = set()
+        for line in result.stdout.splitlines():
+            if line.startswith("ref: refs/heads/") and line.endswith("\tHEAD"):
+                branch = line.removeprefix("ref: refs/heads/").split("\t", 1)[0]
+                if branch in {"main", "master"}:
+                    return branch, "remote_head"
+            if "\trefs/heads/" in line:
+                branch = line.rsplit("refs/heads/", 1)[-1]
+                if branch in {"main", "master"}:
+                    candidates.add(branch)
+        if len(candidates) == 1:
+            return candidates.pop(), "single_remote_candidate"
+        if len(candidates) > 1:
+            raise PublishError(
+                "remote exposes both main and master without an authoritative HEAD; "
+                "pass --main-branch explicitly"
+            )
+    symbolic = git(repo, "symbolic-ref", f"refs/remotes/{remote}/HEAD", check=False)
+    if symbolic.returncode == 0:
+        branch = symbolic.stdout.strip().rsplit("/", 1)[-1]
+        if branch in {"main", "master"}:
+            return branch, "local_remote_head_fallback"
+    raise PublishError(
+        "cannot resolve mainline without changing repository refs; "
+        "pass --main-branch explicitly"
+    )
+
+
 def validate_thresholds(behind_threshold: int, overlap_threshold: int) -> None:
     if behind_threshold < 1:
         raise PublishError("--main-behind-threshold must be at least 1")
@@ -823,11 +867,39 @@ def mapped_expected_login(info: RemoteInfo) -> str | None:
     return None
 
 
+def mapped_forge_command(info: RemoteInfo) -> str:
+    if info.provider == "github":
+        login = mapped_expected_login(info)
+        if login == "TerraRoot3":
+            return "gh-terra"
+        if login == "hanbaokun":
+            return "gh-han"
+        return "gh"
+    return "glab"
+
+
+def resolve_expected_login(
+    info: RemoteInfo,
+    profile: RepositoryProfile | None,
+    requested: str | None,
+) -> str | None:
+    mapped = mapped_expected_login(info)
+    profile_login = profile.expected_login if profile else None
+    required = profile_login or mapped
+    if requested and required and requested.casefold() != required.casefold():
+        raise PublishError(
+            f"--expected-login {requested!r} conflicts with repository mapping {required!r}"
+        )
+    return requested or required
+
+
 def verify_forge_identity(
     repo: Path,
     info: RemoteInfo,
     command: str,
     expected_login: str | None,
+    *,
+    emit_log: bool = True,
 ) -> str:
     mapped_login = mapped_expected_login(info)
     if (
@@ -852,7 +924,8 @@ def verify_forge_identity(
         raise PublishError(
             f"forge login mismatch: expected {required_login}, active {login}"
         )
-    log(f"forge identity: {info.host} -> {login}")
+    if emit_log:
+        log(f"forge identity: {info.host} -> {login}")
     return login
 
 
@@ -2469,10 +2542,30 @@ def publish_production(args: argparse.Namespace) -> None:
 
 def show_plan(args: argparse.Namespace) -> None:
     repo = resolve_repo(args.repo)
+    validate_remote_name(args.remote)
     source = current_branch(repo)
     remote_url = args.forge_url or git_output(repo, "remote", "get-url", args.remote)
     info = parse_remote(remote_url, args.provider)
     profile = match_repository_profile(info, load_repository_profiles())
+    main, main_resolution = resolve_plan_main_branch(
+        repo, args.remote, args.main_branch
+    )
+    ensure_mainline_branch(main)
+    forge_command = (
+        args.github_cli if info.provider == "github" else args.gitlab_cli
+    ) or mapped_forge_command(info)
+    expected_login = resolve_expected_login(info, profile, args.expected_login)
+    actual_login = None
+    identity_status = "not_checked"
+    if args.verify_forge_identity:
+        actual_login = verify_forge_identity(
+            repo,
+            info,
+            forge_command,
+            expected_login,
+            emit_log=False,
+        )
+        identity_status = "verified"
     behind_threshold, overlap_threshold, threshold_source = effective_thresholds(
         profile,
         args.main_behind_threshold,
@@ -2486,6 +2579,17 @@ def show_plan(args: argparse.Namespace) -> None:
         "host": info.host,
         "repository": info.slug,
         "remote_fingerprint": info.fingerprint,
+        "mainline": {
+            "branch": main,
+            "remote_ref": f"{args.remote}/{main}",
+            "resolution": main_resolution,
+        },
+        "forge_identity": {
+            "command": forge_command,
+            "expected_login": expected_login,
+            "actual_login": actual_login,
+            "status": identity_status,
+        },
         "repository_profile": (
             {
                 "id": profile.profile_id,
@@ -2673,6 +2777,15 @@ def parser() -> argparse.ArgumentParser:
         help="explicit forge URL when the Git transport remote is a local mirror",
     )
     plan_parser.add_argument("--dev-branch", default="dev")
+    plan_parser.add_argument("--main-branch", default="auto")
+    plan_parser.add_argument("--github-cli")
+    plan_parser.add_argument("--gitlab-cli")
+    plan_parser.add_argument("--expected-login")
+    plan_parser.add_argument(
+        "--verify-forge-identity",
+        action="store_true",
+        help="verify the mapped forge CLI login without changing repository state",
+    )
     plan_parser.add_argument(
         "--main-behind-threshold",
         type=int,

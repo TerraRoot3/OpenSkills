@@ -20,7 +20,15 @@ Run the deterministic script instead of rebuilding the Git workflow manually. Te
 python3 scripts/publish_environment.py plan --repo <repo>
 ```
 
-Resolve the script relative to this Skill directory. The plan reports repository profiles, rule sources, thresholds, identity, and production automation without modifying the target repository.
+Resolve the script relative to this Skill directory. The plan resolves the live remote `HEAD` as `main` or `master` with `git ls-remote` and reports its resolution source without fetching or modifying repository refs. It also reports the repository-mapped forge command and expected login. Before production publication, verify the mapped login through the same wrapper execution path used by production:
+
+```bash
+python3 scripts/publish_environment.py plan \
+  --repo <repo> \
+  --verify-forge-identity
+```
+
+Known GitHub Owners automatically map to `gh-terra` or `gh-han`. These may be zsh functions rather than executable files, so do not use a non-interactive `command -v` result to declare them missing; the script safely retries them through an interactive login zsh. Likewise, do not require `origin/main` before resolving the remote mainline: a repository whose remote `HEAD` is `master` is valid and should report `origin/master`.
 
 ## Publish test
 

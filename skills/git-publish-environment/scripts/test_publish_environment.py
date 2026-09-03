@@ -55,10 +55,11 @@ def git_output(repo: Path, *args: str) -> str:
 
 
 class RepoFixture:
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, main_branch: str = "main") -> None:
         self.root = root
         self.remote = root / "remote.git"
         self.repo = root / "repo"
+        self.main_branch = main_branch
         run(["git", "init", "--bare", str(self.remote)], cwd=root)
         run(["git", "init", str(self.repo)], cwd=root)
         git(self.repo, "config", "user.name", "Test User")
@@ -66,9 +67,9 @@ class RepoFixture:
         (self.repo / "README.md").write_text("main\n", encoding="utf-8")
         git(self.repo, "add", "README.md")
         git(self.repo, "commit", "-m", "chore: initialize")
-        git(self.repo, "branch", "-M", "main")
+        git(self.repo, "branch", "-M", main_branch)
         git(self.repo, "remote", "add", "origin", str(self.remote))
-        git(self.repo, "push", "-u", "origin", "main")
+        git(self.repo, "push", "-u", "origin", main_branch)
         run(
             [
                 "git",
@@ -76,7 +77,7 @@ class RepoFixture:
                 str(self.remote),
                 "symbolic-ref",
                 "HEAD",
-                "refs/heads/main",
+                f"refs/heads/{main_branch}",
             ],
             cwd=root,
         )
@@ -85,7 +86,7 @@ class RepoFixture:
         git(self.repo, "add", "dev.txt")
         git(self.repo, "commit", "-m", "chore: initialize dev")
         git(self.repo, "push", "-u", "origin", "dev")
-        git(self.repo, "checkout", "-b", "feature/test", "main")
+        git(self.repo, "checkout", "-b", "feature/test", main_branch)
         (self.repo / "feature.txt").write_text("feature\n", encoding="utf-8")
         git(self.repo, "add", "feature.txt")
         git(self.repo, "commit", "-m", "feat: add feature")
@@ -96,14 +97,14 @@ def advance_remote_main(fixture: RepoFixture, commits: int) -> tuple[Path, str]:
     run(["git", "clone", str(fixture.remote), str(updater)], cwd=fixture.root)
     git(updater, "config", "user.name", "Remote User")
     git(updater, "config", "user.email", "remote-user@users.noreply.github.com")
-    git(updater, "checkout", "main")
+    git(updater, "checkout", fixture.main_branch)
     for index in range(commits):
         path = updater / f"main-change-{index}.txt"
         path.write_text(f"main change {index}\n", encoding="utf-8")
         git(updater, "add", path.name)
         git(updater, "commit", "-m", f"chore: main change {index}")
-    git(updater, "push", "origin", "main")
-    return updater, git_output(updater, "rev-parse", "main")
+    git(updater, "push", "origin", fixture.main_branch)
+    return updater, git_output(updater, "rev-parse", fixture.main_branch)
 
 
 class PublishEnvironmentTests(unittest.TestCase):
@@ -173,6 +174,22 @@ class PublishEnvironmentTests(unittest.TestCase):
                 "gitlab",
             )
 
+    def test_forge_wrapper_falls_back_to_interactive_zsh_function(self) -> None:
+        completed = subprocess.CompletedProcess(["/bin/zsh"], 0, "TerraRoot3\n", "")
+        with (
+            mock.patch.object(PUBLISH.shutil, "which", return_value=None),
+            mock.patch.object(PUBLISH, "run", return_value=completed) as run_mock,
+        ):
+            result = PUBLISH.forge_run(
+                "gh-terra",
+                ["api", "user", "--jq", ".login"],
+                Path("."),
+            )
+
+        self.assertEqual(result.stdout.strip(), "TerraRoot3")
+        command = run_mock.call_args.args[0]
+        self.assertEqual(command[1:3], ["-lic", 'gh-terra "$@"'])
+
     def test_repository_profile_matches_only_exact_remote_fingerprint(self) -> None:
         profiles = PUBLISH.load_repository_profiles()
         pagepop = PUBLISH.parse_remote(
@@ -235,6 +252,61 @@ class PublishEnvironmentTests(unittest.TestCase):
             "repository_profile",
         )
         self.assertTrue(payload["mainline_sync"]["dev_into_demand_forbidden"])
+
+    def test_plan_resolves_master_and_verifies_mapped_shell_wrapper(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            fixture = RepoFixture(root, main_branch="master")
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            wrapper = bin_dir / "gh-terra"
+            wrapper.write_text("#!/bin/sh\nprintf 'TerraRoot3\\n'\n", encoding="utf-8")
+            wrapper.chmod(0o755)
+            env = dict(os.environ)
+            env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
+            refs_before = git_output(fixture.repo, "show-ref")
+
+            result = run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "plan",
+                    "--repo",
+                    str(fixture.repo),
+                    "--provider",
+                    "github",
+                    "--forge-url",
+                    "git@github.com:TerraRoot3/OpenSkills.git",
+                    "--verify-forge-identity",
+                ],
+                cwd=fixture.repo,
+                env=env,
+            )
+
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["mainline"]["branch"], "master")
+            self.assertEqual(payload["mainline"]["remote_ref"], "origin/master")
+            self.assertEqual(payload["mainline"]["resolution"], "remote_head")
+            self.assertEqual(payload["forge_identity"]["command"], "gh-terra")
+            self.assertEqual(
+                payload["forge_identity"]["expected_login"], "TerraRoot3"
+            )
+            self.assertEqual(
+                payload["forge_identity"]["actual_login"], "TerraRoot3"
+            )
+            self.assertEqual(payload["forge_identity"]["status"], "verified")
+            self.assertEqual(git_output(fixture.repo, "show-ref"), refs_before)
+            missing_main = git(
+                fixture.repo,
+                "rev-parse",
+                "--verify",
+                "origin/main",
+                check=False,
+            )
+            self.assertNotEqual(
+                missing_main.returncode,
+                0,
+            )
 
     def test_pagepop_production_gate_waits_for_active_workflow_run(self) -> None:
         profile = PUBLISH.load_repository_profiles()[0]
